@@ -231,6 +231,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       HAVE_MAVEN_PUBLISH: ${{ secrets.MAVEN_PUBLISH_URL != '' && secrets.MAVEN_PUBLISH_USERNAME != '' && secrets.MAVEN_PUBLISH_PASSWORD != '' }}
+      HAVE_MAVEN_REPO: ${{ secrets.MAVEN_REPO_URL != '' && secrets.MAVEN_USERNAME != '' && secrets.MAVEN_PASSWORD != '' }}
     steps:
       - name: Checkout
         if: ${{ env.HAVE_MAVEN_PUBLISH == 'true' }}
@@ -246,17 +247,56 @@ jobs:
 
       - name: Set up Maven settings.xml for publishing
         if: ${{ env.HAVE_MAVEN_PUBLISH == 'true' }}
+        env:
+          MAVEN_REPO_URL: ${{ secrets.MAVEN_REPO_URL }}
+          MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.MAVEN_PASSWORD }}
         run: |
           mkdir -p $HOME/.m2
-          cat > $HOME/.m2/settings.xml << 'EOF'
-          <settings>
-            <servers>
-              <server>
+          
+          # Build servers section
+          SERVERS="<server>
                 <id>publish-repo</id>
                 <username>${{ secrets.MAVEN_PUBLISH_USERNAME }}</username>
                 <password>${{ secrets.MAVEN_PUBLISH_PASSWORD }}</password>
-              </server>
+              </server>"
+          
+          PROFILES=""
+          ACTIVE_PROFILES=""
+          
+          # Add custom repo for dependencies if configured
+          if [[ -n "$MAVEN_REPO_URL" && -n "$MAVEN_USERNAME" && -n "$MAVEN_PASSWORD" ]]; then
+            SERVERS="$SERVERS
+              <server>
+                <id>custom-repo</id>
+                <username>$MAVEN_USERNAME</username>
+                <password>$MAVEN_PASSWORD</password>
+              </server>"
+            
+            PROFILES="<profiles>
+              <profile>
+                <id>additional-repo</id>
+                <repositories>
+                  <repository>
+                    <id>custom-repo</id>
+                    <url>$MAVEN_REPO_URL</url>
+                  </repository>
+                </repositories>
+              </profile>
+            </profiles>"
+            
+            ACTIVE_PROFILES="<activeProfiles>
+              <activeProfile>additional-repo</activeProfile>
+            </activeProfiles>"
+          fi
+          
+          cat > $HOME/.m2/settings.xml << EOF
+          <settings>
+            <servers>
+              $SERVERS
             </servers>
+            $PROFILES
+            $ACTIVE_PROFILES
           </settings>
           EOF
 
