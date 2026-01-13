@@ -213,13 +213,13 @@ jobs:
           generate_release_notes: true
 
       - name: Log in to Google Cloud
-        if: ${{ success() && env.HAVE_GCP }}
+        if: ${{ success() && env.HAVE_GCP == 'true' }}
         uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
       - name: Upload to Google Cloud Storage
-        if: ${{ success() && env.HAVE_GCP && env.HAVE_GCS_BUCKET }}
+        if: ${{ success() && env.HAVE_GCP == 'true' && env.HAVE_GCS_BUCKET == 'true' }}
         uses: google-github-actions/upload-cloud-storage@v3
         with:
           path: ${{ needs.build.outputs.artifact_id }}-${{ needs.build.outputs.version }}.zip
