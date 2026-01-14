@@ -35,6 +35,8 @@ jobs:
       MAVEN_PUBLISH_PASSWORD: ${{ secrets.MAVEN_PUBLISH_PASSWORD }}
       GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
       GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      MODTALE_API_KEY: ${{ secrets.MODTALE_API_KEY }}
+      MODTALE_PROJECT_ID: ${{ secrets.MODTALE_PROJECT_ID }}
 ```
 
 ## Inputs
@@ -62,24 +64,26 @@ jobs:
 
 ## Secrets
 
-| Secret | Required | Description |
-|--------|----------|-------------|
-| `MAVEN_REPO_URL` | No | Maven repository URL for fetching dependencies |
-| `MAVEN_USERNAME` | No | Maven repository username |
-| `MAVEN_PASSWORD` | No | Maven repository password |
-| `MAVEN_PUBLISH_URL` | No | Maven repository URL for publishing releases |
-| `MAVEN_PUBLISH_USERNAME` | No | Maven publish username |
-| `MAVEN_PUBLISH_PASSWORD` | No | Maven publish password |
-| `GCP_CREDENTIALS` | No | GCP credentials JSON for GCS uploads |
-| `GCS_BUCKET` | No | GCS bucket name for artifact storage |
+| Secret                   | Required | Description                                    |
+|--------------------------|----------|------------------------------------------------|
+| `MAVEN_REPO_URL`         | No       | Maven repository URL for fetching dependencies |
+| `MAVEN_USERNAME`         | No       | Maven repository username                      |
+| `MAVEN_PASSWORD`         | No       | Maven repository password                      |
+| `MAVEN_PUBLISH_URL`      | No       | Maven repository URL for publishing releases   |
+| `MAVEN_PUBLISH_USERNAME` | No       | Maven publish username                         |
+| `MAVEN_PUBLISH_PASSWORD` | No       | Maven publish password                         |
+| `GCP_CREDENTIALS`        | No       | GCP credentials JSON for GCS uploads           |
+| `GCS_BUCKET`             | No       | GCS bucket name for artifact storage           |
+| `MODTALE_API_KEY`        | No       | Modtale API key for publishing to Modtale      |
+| `MODTALE_PROJECT_ID`     | No       | Modtale project ID for publishing              |
 
 ## Outputs
 
-| Output | Description |
-|--------|-------------|
-| `version` | The resolved version string |
-| `artifact_id` | The Maven artifact ID |
-| `is_release` | Whether this is a release build (`true`/`false`) |
+| Output        | Description                                      |
+|---------------|--------------------------------------------------|
+| `version`     | The resolved version string                      |
+| `artifact_id` | The Maven artifact ID                            |
+| `is_release`  | Whether this is a release build (`true`/`false`) |
 
 ## Versioning Behavior
 
@@ -106,6 +110,44 @@ Tags must follow semver format with a leading `v` (e.g., `v1.0.0`, `v2.1.0-beta1
 
 3. **Maven Publish Job** (releases only)
    - Deploys artifacts to a Maven repository
+
+4. **Modtale Publish Job** (releases only)
+   - Fetches GitHub-generated release notes
+   - Publishes to [Modtale](https://modtale.net) with appropriate channel (RELEASE or BETA based on prerelease status)
+
+## Modtale Publishing
+
+The workflow automatically publishes releases to Modtale when the required secrets are configured. No additional inputs are needed—publishing is triggered for all release builds.
+
+### Configuration
+
+Add these secrets to your repository:
+
+| Secret               | Required | Description                                                      |
+|----------------------|----------|------------------------------------------------------------------|
+| `MODTALE_API_KEY`    | Yes      | Your Modtale API key (obtain from your Modtale account settings) |
+| `MODTALE_PROJECT_ID` | Yes      | Your Modtale project ID                                          |
+
+### Example Usage
+
+```yaml
+jobs:
+  build:
+    uses: nitrado/hytale-plugin-workflows/.github/workflows/plugin-ci.yml@main
+    secrets:
+      # ... other secrets ...
+      MODTALE_API_KEY: ${{ secrets.MODTALE_API_KEY }}
+      MODTALE_PROJECT_ID: ${{ secrets.MODTALE_PROJECT_ID }}
+```
+
+### Behavior
+
+- **Release tags** (e.g., `v1.0.0`): Published to the `RELEASE` channel
+- **Prerelease tags** (e.g., `v1.0.0-rc1`, `v1.0.0-beta2`): Published to the `BETA` channel
+- **Changelog**: Automatically uses GitHub-generated release notes
+- **Game versions**: Defaults to `1.0.0`
+
+If `MODTALE_API_KEY` or `MODTALE_PROJECT_ID` are not configured, the Modtale publish step is silently skipped.
 
 ## Requirements
 
