@@ -30,10 +30,10 @@ on:
     secrets:
       MODTALE_API_KEY:
         description: "Modtale API key for authentication"
-        required: true
+        required: false
       MODTALE_PROJECT_ID:
         description: "Modtale project ID"
-        required: true
+        required: false
 
 jobs:
   publish-modtale:
@@ -50,6 +50,12 @@ jobs:
           MODTALE_API_KEY: ${{ secrets.MODTALE_API_KEY }}
           MODTALE_PROJECT_ID: ${{ secrets.MODTALE_PROJECT_ID }}
         run: |
+          # Check if secrets are configured
+          if [[ -z "$MODTALE_API_KEY" || -z "$MODTALE_PROJECT_ID" ]]; then
+            echo "Modtale secrets not configured, skipping publish"
+            exit 0
+          fi
+          
           # Find the built jar (exclude sources/javadoc jars if present)
           JAR_PATH=$(find . -name "${{ inputs.artifact-id }}-${{ inputs.version }}.jar" -print | head -n 1)
           

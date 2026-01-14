@@ -349,7 +349,7 @@ jobs:
 
   publish-modtale:
     needs: [build, publish, fetch-release-notes]
-    if: ${{ needs.build.outputs.is_release == 'true' && secrets.MODTALE_API_KEY != '' && secrets.MODTALE_PROJECT_ID != '' }}
+    if: ${{ needs.build.outputs.is_release == 'true' }}
     uses: ./.github/workflows/modtale-publish.yml
     with:
       artifact-id: ${{ needs.build.outputs.artifact_id }}
