@@ -49,6 +49,7 @@ jobs:
         env:
           MODTALE_API_KEY: ${{ secrets.MODTALE_API_KEY }}
           MODTALE_PROJECT_ID: ${{ secrets.MODTALE_PROJECT_ID }}
+          CHANGELOG: ${{ inputs.changelog }}
         run: |
           # Check if secrets are configured
           if [[ -z "$MODTALE_API_KEY" || -z "$MODTALE_PROJECT_ID" ]]; then
@@ -70,13 +71,18 @@ jobs:
           echo "Publishing Version: ${{ inputs.version }}"
           echo "Game Versions: ${{ inputs.game-versions }}"
           
+          # Write changelog to temp file to handle all special characters safely
+          CHANGELOG_FILE=$(mktemp)
+          printf '%s' "$CHANGELOG" > "$CHANGELOG_FILE"
+          trap 'rm -f "$CHANGELOG_FILE"' EXIT
+          
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.modtale.net/api/v1/projects/$MODTALE_PROJECT_ID/versions" \
             -H "X-MODTALE-KEY: $MODTALE_API_KEY" \
             -F "file=@$JAR_PATH" \
             -F "channel=${{ inputs.channel }}" \
             -F "versionNumber=${{ inputs.version }}" \
             -F "gameVersions=${{ inputs.game-versions }}" \
-            -F "changelog=${{ inputs.changelog }}")
+            -F "changelog=<$CHANGELOG_FILE")
           
           HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
           BODY=$(echo "$RESPONSE" | sed '$d')
