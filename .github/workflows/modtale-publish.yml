@@ -22,7 +22,7 @@ on:
       game-versions:
         description: "Hytale game versions (comma-separated)"
         type: string
-        default: "1.0.0"
+        default: "1.0-SNAPSHOT"
       changelog:
         description: "Changelog for this version"
         type: string
