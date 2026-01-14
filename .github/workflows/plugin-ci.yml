@@ -66,6 +66,7 @@ on:
 
 jobs:
   build:
+    if: ${{ github.repository != 'nitrado/hytale-plugin-workflows' }}
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}

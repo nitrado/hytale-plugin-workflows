@@ -37,6 +37,7 @@ on:
 
 jobs:
   publish-modtale:
+    if: ${{ github.repository != 'nitrado/hytale-plugin-workflows' }}
     runs-on: ubuntu-latest
     steps:
       - name: Download Build Artifacts
