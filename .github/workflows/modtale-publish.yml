@@ -1,0 +1,86 @@
+name: Modtale Publish (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      artifact-name:
+        description: "Name of the artifact to download (from a previous job)"
+        type: string
+        default: "build-artifacts"
+      artifact-id:
+        description: "The artifact ID (jar name prefix)"
+        type: string
+        required: true
+      channel:
+        description: "The Modtale channel (RELEASE|BETA|ALPHA)"
+        type: string
+        default: "RELEASE"
+      version:
+        description: "The version to publish"
+        type: string
+        required: true
+      game-versions:
+        description: "Hytale game versions (comma-separated)"
+        type: string
+        default: "1.0.0"
+      changelog:
+        description: "Changelog for this version"
+        type: string
+        default: "Automated Build & Release from GitHub"
+    secrets:
+      MODTALE_API_KEY:
+        description: "Modtale API key for authentication"
+        required: true
+      MODTALE_PROJECT_ID:
+        description: "Modtale project ID"
+        required: true
+
+jobs:
+  publish-modtale:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v7
+        with:
+          name: ${{ inputs.artifact-name }}
+
+      - name: Upload to Modtale
+        env:
+          MODTALE_API_KEY: ${{ secrets.MODTALE_API_KEY }}
+          MODTALE_PROJECT_ID: ${{ secrets.MODTALE_PROJECT_ID }}
+        run: |
+          # Find the built jar (exclude sources/javadoc jars if present)
+          JAR_PATH=$(find . -name "${{ inputs.artifact-id }}-${{ inputs.version }}.jar" -print | head -n 1)
+          
+          if [[ -z "$JAR_PATH" ]]; then
+            echo "ERROR: Could not find jar file matching ${{ inputs.artifact-id }}-${{ inputs.version }}.jar"
+            echo "Available files:"
+            find . -name "*.jar" -print
+            exit 1
+          fi
+          
+          echo "Found Jar: $JAR_PATH"
+          echo "Publishing Version: ${{ inputs.version }}"
+          echo "Game Versions: ${{ inputs.game-versions }}"
+          
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.modtale.net/api/v1/projects/$MODTALE_PROJECT_ID/versions" \
+            -H "X-MODTALE-KEY: $MODTALE_API_KEY" \
+            -F "file=@$JAR_PATH" \
+            -F "channel=${{ inputs.channel }}" \
+            -F "versionNumber=${{ inputs.version }}" \
+            -F "gameVersions=${{ inputs.game-versions }}" \
+            -F "changelog=${{ inputs.changelog }}")
+          
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          
+          echo "Response: $BODY"
+          echo "HTTP Status: $HTTP_CODE"
+          
+          if [[ "$HTTP_CODE" -ge 200 && "$HTTP_CODE" -lt 300 ]]; then
+            echo "Successfully published to Modtale!"
+          else
+            echo "ERROR: Failed to publish to Modtale (HTTP $HTTP_CODE)"
+            exit 1
+          fi
+

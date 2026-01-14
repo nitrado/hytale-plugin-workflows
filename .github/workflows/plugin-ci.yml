@@ -47,6 +47,12 @@ on:
       GCS_BUCKET:
         description: "GCS bucket for artifact upload"
         required: false
+      MODTALE_API_KEY:
+        description: "Modtale API key for authentication"
+        required: false
+      MODTALE_PROJECT_ID:
+        description: "Modtale project ID"
+        required: false
     outputs:
       version:
         description: "The resolved version"
@@ -309,4 +315,47 @@ jobs:
           -Drevision=${{ needs.build.outputs.version }}
           -DaltDeploymentRepository=publish-repo::${{ secrets.MAVEN_PUBLISH_URL }}
           -DskipTests
+
+  fetch-release-notes:
+    needs: [build, publish]
+    if: ${{ needs.build.outputs.is_release == 'true' && needs.build.result == 'success' && needs.publish.result == 'success' }}
+    runs-on: ubuntu-latest
+    outputs:
+      changelog: ${{ steps.get-notes.outputs.changelog }}
+    steps:
+      - name: Fetch GitHub Release Notes
+        id: get-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG_NAME="${{ needs.build.outputs.tag_name }}"
+          echo "Fetching release notes for tag: $TAG_NAME"
+          
+          RELEASE_BODY=$(gh api repos/${{ github.repository }}/releases/tags/$TAG_NAME --jq '.body // empty' 2>/dev/null || echo "")
+          
+          if [[ -n "$RELEASE_BODY" ]]; then
+            echo "Found GitHub release notes"
+            # Use EOF delimiter to handle multi-line output
+            {
+              echo 'changelog<<EOF'
+              echo "$RELEASE_BODY"
+              echo 'EOF'
+            } >> $GITHUB_OUTPUT
+          else
+            echo "No GitHub release notes found, using default"
+            echo "changelog=Automated Build & Release from GitHub" >> $GITHUB_OUTPUT
+          fi
+
+  publish-modtale:
+    needs: [build, publish, fetch-release-notes]
+    if: ${{ needs.build.outputs.is_release == 'true' && secrets.MODTALE_API_KEY != '' && secrets.MODTALE_PROJECT_ID != '' }}
+    uses: ./.github/workflows/modtale-publish.yml
+    with:
+      artifact-id: ${{ needs.build.outputs.artifact_id }}
+      version: ${{ needs.build.outputs.version }}
+      channel: ${{ (needs.build.outputs.is_prerelease == 'true') && 'BETA' || 'RELEASE' }}
+      changelog: ${{ needs.fetch-release-notes.outputs.changelog }}
+    secrets:
+      MODTALE_API_KEY: ${{ secrets.MODTALE_API_KEY }}
+      MODTALE_PROJECT_ID: ${{ secrets.MODTALE_PROJECT_ID }}
 
