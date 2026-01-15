@@ -26,7 +26,7 @@ on:
       game-versions:
         description: "Game version IDs (comma-separated)"
         type: string
-        default: ""
+        default: "1.0-SNAPSHOT"
       changelog:
         description: "Changelog for this version"
         type: string
@@ -61,25 +61,82 @@ jobs:
         env:
           CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
           CURSEFORGE_PROJECT_ID: ${{ secrets.CURSEFORGE_PROJECT_ID }}
-        if: ${{ env.CURSEFORGE_TOKEN != '' && env.CURSEFORGE_PROJECT_ID != '' }}
-        uses: itsmeow/curseforge-upload@v3
-        with:
-          token: ${{ secrets.CURSEFORGE_TOKEN }}
-          project_id: ${{ secrets.CURSEFORGE_PROJECT_ID }}
-          game_endpoint: ${{ inputs.game-endpoint }}
-          file_path: ${{ inputs.artifact-id }}-${{ inputs.version }}.jar
-          changelog: ${{ inputs.changelog }}
-          changelog_type: ${{ inputs.changelog-type }}
-          display_name: ${{ inputs.artifact-id }}-${{ inputs.version }}
-          game_versions: ${{ inputs.game-versions }}
-          release_type: ${{ inputs.release-type }}
-          relations: ${{ inputs.relations }}
-
-      - name: Skip if secrets not configured
-        env:
-          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
-          CURSEFORGE_PROJECT_ID: ${{ secrets.CURSEFORGE_PROJECT_ID }}
-        if: ${{ env.CURSEFORGE_TOKEN == '' || env.CURSEFORGE_PROJECT_ID == '' }}
+          CHANGELOG: ${{ inputs.changelog }}
         run: |
-          echo "CurseForge secrets not configured, skipping publish"
+          # Check if secrets are configured
+          if [[ -z "$CURSEFORGE_TOKEN" || -z "$CURSEFORGE_PROJECT_ID" ]]; then
+            echo "CurseForge secrets not configured, skipping publish"
+            exit 0
+          fi
+          
+          # Find the built jar
+          JAR_PATH=$(find . -name "${{ inputs.artifact-id }}-${{ inputs.version }}.jar" -print | head -n 1)
+          
+          if [[ -z "$JAR_PATH" ]]; then
+            echo "ERROR: Could not find jar file matching ${{ inputs.artifact-id }}-${{ inputs.version }}.jar"
+            echo "Available files:"
+            find . -name "*.jar" -print
+            exit 1
+          fi
+          
+          echo "Found Jar: $JAR_PATH"
+          echo "Publishing Version: ${{ inputs.version }}"
+          echo "Game Versions: ${{ inputs.game-versions }}"
+          
+          # Build game versions array
+          GAME_VERSIONS_JSON="[]"
+          if [[ -n "${{ inputs.game-versions }}" ]]; then
+            GAME_VERSIONS_JSON=$(echo "${{ inputs.game-versions }}" | tr ',' '\n' | jq -R . | jq -s .)
+          fi
+          
+          # Build relations array
+          RELATIONS_JSON="[]"
+          if [[ -n "${{ inputs.relations }}" ]]; then
+            RELATIONS_JSON=$(echo "${{ inputs.relations }}" | tr ',' '\n' | while read -r relation; do
+              slug=$(echo "$relation" | cut -d: -f1)
+              type=$(echo "$relation" | cut -d: -f2)
+              echo "{\"slug\": \"$slug\", \"type\": \"$type\"}"
+            done | jq -s .)
+          fi
+          
+          # Write changelog to temp file to handle all special characters safely
+          CHANGELOG_FILE=$(mktemp)
+          printf '%s' "$CHANGELOG" > "$CHANGELOG_FILE"
+          trap 'rm -f "$CHANGELOG_FILE" metadata.json' EXIT
+          
+          # Build metadata JSON
+          cat > metadata.json << EOF
+          {
+            "changelog": $(jq -Rs . < "$CHANGELOG_FILE"),
+            "changelogType": "${{ inputs.changelog-type }}",
+            "displayName": "${{ inputs.artifact-id }}-${{ inputs.version }}",
+            "gameVersions": $GAME_VERSIONS_JSON,
+            "releaseType": "${{ inputs.release-type }}",
+            "relations": {
+              "projects": $RELATIONS_JSON
+            }
+          }
+          EOF
+          
+          echo "Metadata:"
+          cat metadata.json
+          
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "https://${{ inputs.game-endpoint }}.curseforge.com/api/projects/$CURSEFORGE_PROJECT_ID/upload-file" \
+            -H "X-Api-Token: $CURSEFORGE_TOKEN" \
+            -F "metadata=<metadata.json" \
+            -F "file=@$JAR_PATH")
+          
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          
+          echo "Response: $BODY"
+          echo "HTTP Status: $HTTP_CODE"
+          
+          if [[ "$HTTP_CODE" -ge 200 && "$HTTP_CODE" -lt 300 ]]; then
+            echo "Successfully published to CurseForge!"
+          else
+            echo "ERROR: Failed to publish to CurseForge (HTTP $HTTP_CODE)"
+            exit 1
+          fi
 
