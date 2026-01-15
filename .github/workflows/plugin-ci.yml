@@ -53,6 +53,12 @@ on:
       MODTALE_PROJECT_ID:
         description: "Modtale project ID"
         required: false
+      CURSEFORGE_TOKEN:
+        description: "CurseForge API token for authentication"
+        required: false
+      CURSEFORGE_PROJECT_ID:
+        description: "CurseForge project ID (numerical)"
+        required: false
     outputs:
       version:
         description: "The resolved version"
@@ -359,4 +365,17 @@ jobs:
     secrets:
       MODTALE_API_KEY: ${{ secrets.MODTALE_API_KEY }}
       MODTALE_PROJECT_ID: ${{ secrets.MODTALE_PROJECT_ID }}
+
+  publish-curseforge:
+    needs: [build, publish, fetch-release-notes]
+    if: ${{ needs.build.outputs.is_release == 'true' }}
+    uses: ./.github/workflows/curseforge-publish.yml
+    with:
+      artifact-id: ${{ needs.build.outputs.artifact_id }}
+      version: ${{ needs.build.outputs.version }}
+      release-type: ${{ (needs.build.outputs.is_prerelease == 'true') && 'beta' || 'release' }}
+      changelog: ${{ needs.fetch-release-notes.outputs.changelog }}
+    secrets:
+      CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+      CURSEFORGE_PROJECT_ID: ${{ secrets.CURSEFORGE_PROJECT_ID }}
 
