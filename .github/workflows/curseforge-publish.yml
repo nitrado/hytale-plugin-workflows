@@ -83,10 +83,11 @@ jobs:
           echo "Publishing Version: ${{ inputs.version }}"
           echo "Game Versions: ${{ inputs.game-versions }}"
           
-          # Build game versions array
-          GAME_VERSIONS_JSON="[]"
+          # Build game versions JSON block (only if provided)
+          GAME_VERSIONS_BLOCK=""
           if [[ -n "${{ inputs.game-versions }}" ]]; then
             GAME_VERSIONS_JSON=$(echo "${{ inputs.game-versions }}" | tr ',' '\n' | jq -R . | jq -s .)
+            GAME_VERSIONS_BLOCK=",\"gameVersions\": $GAME_VERSIONS_JSON"
           fi
           
           # Build relations JSON block (only if relations are provided)
@@ -111,8 +112,7 @@ jobs:
             "changelog": $(jq -Rs . < "$CHANGELOG_FILE"),
             "changelogType": "${{ inputs.changelog-type }}",
             "displayName": "${{ inputs.artifact-id }}-${{ inputs.version }}",
-            "gameVersions": $GAME_VERSIONS_JSON,
-            "releaseType": "${{ inputs.release-type }}"$RELATIONS_BLOCK
+            "releaseType": "${{ inputs.release-type }}"$GAME_VERSIONS_BLOCK$RELATIONS_BLOCK
           }
           EOF
           
