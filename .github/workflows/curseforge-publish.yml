@@ -26,7 +26,7 @@ on:
       game-versions:
         description: "Game version IDs (comma-separated)"
         type: string
-        default: "1.0-SNAPSHOT"
+        default: ""
       changelog:
         description: "Changelog for this version"
         type: string
@@ -89,14 +89,15 @@ jobs:
             GAME_VERSIONS_JSON=$(echo "${{ inputs.game-versions }}" | tr ',' '\n' | jq -R . | jq -s .)
           fi
           
-          # Build relations array
-          RELATIONS_JSON="[]"
+          # Build relations JSON block (only if relations are provided)
+          RELATIONS_BLOCK=""
           if [[ -n "${{ inputs.relations }}" ]]; then
             RELATIONS_JSON=$(echo "${{ inputs.relations }}" | tr ',' '\n' | while read -r relation; do
               slug=$(echo "$relation" | cut -d: -f1)
               type=$(echo "$relation" | cut -d: -f2)
               echo "{\"slug\": \"$slug\", \"type\": \"$type\"}"
             done | jq -s .)
+            RELATIONS_BLOCK=",\"relations\": {\"projects\": $RELATIONS_JSON}"
           fi
           
           # Write changelog to temp file to handle all special characters safely
@@ -111,10 +112,7 @@ jobs:
             "changelogType": "${{ inputs.changelog-type }}",
             "displayName": "${{ inputs.artifact-id }}-${{ inputs.version }}",
             "gameVersions": $GAME_VERSIONS_JSON,
-            "releaseType": "${{ inputs.release-type }}",
-            "relations": {
-              "projects": $RELATIONS_JSON
-            }
+            "releaseType": "${{ inputs.release-type }}"$RELATIONS_BLOCK
           }
           EOF
           
