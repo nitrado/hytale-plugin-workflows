@@ -1,0 +1,85 @@
+name: CurseForge Publish (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      artifact-name:
+        description: "Name of the artifact to download (from a previous job)"
+        type: string
+        default: "build-artifacts"
+      artifact-id:
+        description: "The artifact ID (jar name prefix)"
+        type: string
+        required: true
+      version:
+        description: "The version to publish"
+        type: string
+        required: true
+      release-type:
+        description: "The release type (release|beta|alpha)"
+        type: string
+        default: "release"
+      game-endpoint:
+        description: "The subdomain of curseforge.com (e.g., minecraft, kerbal, hytale)"
+        type: string
+        default: "hytale"
+      game-versions:
+        description: "Game version IDs (comma-separated)"
+        type: string
+        default: ""
+      changelog:
+        description: "Changelog for this version"
+        type: string
+        default: "Automated Build & Release from GitHub"
+      changelog-type:
+        description: "The type of changelog (text|html|markdown)"
+        type: string
+        default: "markdown"
+      relations:
+        description: "Project relations (format: projectslug:relationType, comma-separated)"
+        type: string
+        default: ""
+    secrets:
+      CURSEFORGE_TOKEN:
+        description: "CurseForge API token for authentication"
+        required: false
+      CURSEFORGE_PROJECT_ID:
+        description: "CurseForge project ID (numerical)"
+        required: false
+
+jobs:
+  publish-curseforge:
+    if: ${{ github.repository != 'nitrado/hytale-plugin-workflows' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v7
+        with:
+          name: ${{ inputs.artifact-name }}
+
+      - name: Upload to CurseForge
+        env:
+          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+          CURSEFORGE_PROJECT_ID: ${{ secrets.CURSEFORGE_PROJECT_ID }}
+        if: ${{ env.CURSEFORGE_TOKEN != '' && env.CURSEFORGE_PROJECT_ID != '' }}
+        uses: itsmeow/curseforge-upload@v3
+        with:
+          token: ${{ secrets.CURSEFORGE_TOKEN }}
+          project_id: ${{ secrets.CURSEFORGE_PROJECT_ID }}
+          game_endpoint: ${{ inputs.game-endpoint }}
+          file_path: ${{ inputs.artifact-id }}-${{ inputs.version }}.jar
+          changelog: ${{ inputs.changelog }}
+          changelog_type: ${{ inputs.changelog-type }}
+          display_name: ${{ inputs.artifact-id }}-${{ inputs.version }}
+          game_versions: ${{ inputs.game-versions }}
+          release_type: ${{ inputs.release-type }}
+          relations: ${{ inputs.relations }}
+
+      - name: Skip if secrets not configured
+        env:
+          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+          CURSEFORGE_PROJECT_ID: ${{ secrets.CURSEFORGE_PROJECT_ID }}
+        if: ${{ env.CURSEFORGE_TOKEN == '' || env.CURSEFORGE_PROJECT_ID == '' }}
+        run: |
+          echo "CurseForge secrets not configured, skipping publish"
+
