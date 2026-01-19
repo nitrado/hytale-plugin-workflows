@@ -10,7 +10,7 @@ on:
       game-endpoint:
         description: "The subdomain of curseforge.com (e.g., minecraft, kerbal, hytale)"
         type: string
-        default: "authors"
+        default: "42"
       game-versions:
         description: "Game version IDs (comma-separated)"
         type: string
@@ -36,7 +36,7 @@ on:
       game-endpoint:
         description: "The subdomain of curseforge.com"
         type: string
-        default: "authors"
+        default: "42"
       game-versions:
         description: "Game version IDs (comma-separated)"
         type: string
