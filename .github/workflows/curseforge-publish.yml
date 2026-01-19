@@ -7,18 +7,6 @@ on:
         description: "The artifact ID (jar name prefix)"
         type: string
         required: true
-      version:
-        description: "The version to publish"
-        type: string
-        required: true
-      tag-name:
-        description: "The GitHub release tag name"
-        type: string
-        required: true
-      release-type:
-        description: "The release type (release|beta|alpha)"
-        type: string
-        default: "release"
       game-endpoint:
         description: "The subdomain of curseforge.com (e.g., minecraft, kerbal, hytale)"
         type: string
@@ -27,14 +15,6 @@ on:
         description: "Game version IDs (comma-separated)"
         type: string
         default: ""
-      changelog:
-        description: "Changelog for this version"
-        type: string
-        default: "Automated Build & Release from GitHub"
-      changelog-type:
-        description: "The type of changelog (text|html|markdown)"
-        type: string
-        default: "markdown"
       relations:
         description: "Project relations (format: projectslug:relationType, comma-separated)"
         type: string
@@ -49,6 +29,10 @@ on:
 
   workflow_dispatch:
     inputs:
+      artifact-id:
+        description: "The artifact ID (jar name prefix)"
+        type: string
+        required: true
       game-endpoint:
         description: "The subdomain of curseforge.com"
         type: string
@@ -57,14 +41,6 @@ on:
         description: "Game version IDs (comma-separated)"
         type: string
         default: ""
-      changelog-type:
-        description: "The type of changelog"
-        type: choice
-        options:
-          - markdown
-          - text
-          - html
-        default: "markdown"
       relations:
         description: "Project relations (format: projectslug:relationType, comma-separated)"
         type: string
@@ -80,10 +56,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # For workflow_call, use inputs.tag-name; for workflow_dispatch, use GITHUB_REF
-          if [[ -n "${{ inputs.tag-name }}" ]]; then
-            TAG_NAME="${{ inputs.tag-name }}"
-          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+          # Always use GITHUB_REF to determine tag
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             TAG_NAME="${GITHUB_REF#refs/tags/}"
           else
             echo "ERROR: Must be triggered on a tag (current ref: $GITHUB_REF)"
@@ -141,17 +115,6 @@ jobs:
         run: |
           TAG_NAME="${{ steps.resolve.outputs.tag_name }}"
           
-          # If changelog is provided via workflow_call, use it
-          if [[ -n "${{ inputs.changelog }}" && "${{ inputs.changelog }}" != "Automated Build & Release from GitHub" ]]; then
-            {
-              echo 'changelog<<EOF'
-              echo "${{ inputs.changelog }}"
-              echo 'EOF'
-            } >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          
-          # Otherwise, fetch from release
           RELEASE_BODY=$(gh api repos/${{ github.repository }}/releases/tags/$TAG_NAME --jq '.body // empty' 2>/dev/null || echo "")
           
           if [[ -n "$RELEASE_BODY" ]]; then
@@ -235,7 +198,7 @@ jobs:
           cat > metadata.json << EOF
           {
             "changelog": $(jq -Rs . < "$CHANGELOG_FILE"),
-            "changelogType": "${{ inputs.changelog-type }}",
+            "changelogType": "markdown",
             "displayName": "${ARTIFACT_ID}-${VERSION}",
             "releaseType": "${{ steps.resolve.outputs.release_type }}"$GAME_VERSIONS_BLOCK$RELATIONS_BLOCK
           }

@@ -321,10 +321,6 @@ jobs:
     uses: ./.github/workflows/modtale-publish.yml
     with:
       artifact-id: ${{ needs.build.outputs.artifact_id }}
-      version: ${{ needs.build.outputs.version }}
-      tag-name: ${{ needs.build.outputs.tag_name }}
-      channel: ${{ (needs.build.outputs.is_prerelease == 'true') && 'BETA' || 'RELEASE' }}
-      changelog: ${{ needs.generate-changelog.outputs.changelog }}
     secrets:
       MODTALE_API_KEY: ${{ secrets.MODTALE_API_KEY }}
       MODTALE_PROJECT_ID: ${{ secrets.MODTALE_PROJECT_ID }}
@@ -335,9 +331,6 @@ jobs:
     uses: ./.github/workflows/curseforge-publish.yml
     with:
       artifact-id: ${{ needs.build.outputs.artifact_id }}
-      version: ${{ needs.build.outputs.version }}
-      tag-name: ${{ needs.build.outputs.tag_name }}
-      changelog: ${{ needs.generate-changelog.outputs.changelog }}
     secrets:
       CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
       CURSEFORGE_PROJECT_ID: ${{ secrets.CURSEFORGE_PROJECT_ID }}
