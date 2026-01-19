@@ -337,7 +337,6 @@ jobs:
       artifact-id: ${{ needs.build.outputs.artifact_id }}
       version: ${{ needs.build.outputs.version }}
       tag-name: ${{ needs.build.outputs.tag_name }}
-      release-type: ${{ (needs.build.outputs.is_prerelease == 'true') && 'beta' || 'release' }}
       changelog: ${{ needs.generate-changelog.outputs.changelog }}
     secrets:
       CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}

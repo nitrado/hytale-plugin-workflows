@@ -49,14 +49,6 @@ on:
 
   workflow_dispatch:
     inputs:
-      release-type:
-        description: "The release type (release|beta|alpha)"
-        type: choice
-        options:
-          - release
-          - beta
-          - alpha
-        default: "release"
       game-endpoint:
         description: "The subdomain of curseforge.com"
         type: string
@@ -98,6 +90,19 @@ jobs:
             exit 1
           fi
           echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          
+          # Strip leading 'v' for version
+          VERSION="${TAG_NAME#v}"
+          
+          # Determine release type from GitHub release prerelease status
+          IS_PRERELEASE=$(gh api repos/${{ github.repository }}/releases/tags/$TAG_NAME --jq '.prerelease' 2>/dev/null || echo "false")
+          if [[ "$IS_PRERELEASE" == "true" ]]; then
+            echo "release_type=beta" >> $GITHUB_OUTPUT
+            echo "GitHub release is a prerelease, using release type: beta"
+          else
+            echo "release_type=release" >> $GITHUB_OUTPUT
+            echo "GitHub release is stable, using release type: release"
+          fi
           
           # Strip leading 'v' for version
           VERSION="${TAG_NAME#v}"
@@ -232,7 +237,7 @@ jobs:
             "changelog": $(jq -Rs . < "$CHANGELOG_FILE"),
             "changelogType": "${{ inputs.changelog-type }}",
             "displayName": "${ARTIFACT_ID}-${VERSION}",
-            "releaseType": "${{ inputs.release-type }}"$GAME_VERSIONS_BLOCK$RELATIONS_BLOCK
+            "releaseType": "${{ steps.resolve.outputs.release_type }}"$GAME_VERSIONS_BLOCK$RELATIONS_BLOCK
           }
           EOF
           

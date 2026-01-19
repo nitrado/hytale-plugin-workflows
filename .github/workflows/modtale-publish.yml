@@ -15,10 +15,6 @@ on:
         description: "The GitHub release tag name"
         type: string
         required: true
-      channel:
-        description: "The Modtale channel (RELEASE|BETA|ALPHA)"
-        type: string
-        default: "RELEASE"
       game-versions:
         description: "Hytale game versions (comma-separated)"
         type: string
@@ -37,14 +33,6 @@ on:
 
   workflow_dispatch:
     inputs:
-      channel:
-        description: "The Modtale channel (RELEASE|BETA|ALPHA)"
-        type: choice
-        options:
-          - RELEASE
-          - BETA
-          - ALPHA
-        default: "RELEASE"
       game-versions:
         description: "Hytale game versions (comma-separated)"
         type: string
@@ -75,6 +63,16 @@ jobs:
           VERSION="${TAG_NAME#v}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Resolved version: $VERSION from tag: $TAG_NAME"
+          
+          # Determine channel from GitHub release prerelease status
+          IS_PRERELEASE=$(gh api repos/${{ github.repository }}/releases/tags/$TAG_NAME --jq '.prerelease' 2>/dev/null || echo "false")
+          if [[ "$IS_PRERELEASE" == "true" ]]; then
+            echo "channel=BETA" >> $GITHUB_OUTPUT
+            echo "GitHub release is a prerelease, using channel: BETA"
+          else
+            echo "channel=RELEASE" >> $GITHUB_OUTPUT
+            echo "GitHub release is stable, using channel: RELEASE"
+          fi
           
           # If artifact-id is provided as input, use it
           if [[ -n "${{ inputs.artifact-id }}" ]]; then
@@ -183,7 +181,7 @@ jobs:
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.modtale.net/api/v1/projects/$MODTALE_PROJECT_ID/versions" \
             -H "X-MODTALE-KEY: $MODTALE_API_KEY" \
             -F "file=@$JAR_PATH" \
-            -F "channel=${{ inputs.channel }}" \
+            -F "channel=${{ steps.resolve.outputs.channel }}" \
             -F "versionNumber=$VERSION" \
             -F "gameVersions=${{ inputs.game-versions }}" \
             -F "changelog=<$CHANGELOG_FILE")
