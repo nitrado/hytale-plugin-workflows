@@ -207,6 +207,8 @@ jobs:
 
       - name: Generate changelog
         id: changelog
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           TAG_NAME="${{ needs.build.outputs.tag_name }}"
           IS_PRERELEASE="${{ needs.build.outputs.is_prerelease }}"
@@ -234,27 +236,41 @@ jobs:
             echo "Full release: comparing against previous full release: $PREV_TAG"
           fi
           
+          PREV_VERSION="${PREV_TAG#v}"
+          
           if [[ -z "$PREV_TAG" ]]; then
             echo "No previous tag found, using initial commit"
-            CHANGELOG=$(git log --pretty=format:"- %s (%h)" "$TAG_NAME")
+            HEADER="Changes since initial release:"
+            CHANGELOG=$(gh api repos/${{ github.repository }}/releases/generate-notes \
+              -f tag_name="$TAG_NAME" \
+              --jq '.body')
           else
+            HEADER="Changes since ${PREV_VERSION}:"
             echo "Generating changelog from $PREV_TAG to $TAG_NAME"
-            CHANGELOG=$(git log --pretty=format:"- %s (%h)" "$PREV_TAG..$TAG_NAME")
+            CHANGELOG=$(gh api repos/${{ github.repository }}/releases/generate-notes \
+              -f tag_name="$TAG_NAME" \
+              -f previous_tag_name="$PREV_TAG" \
+              --jq '.body')
           fi
           
           if [[ -z "$CHANGELOG" ]]; then
             CHANGELOG="No changes recorded"
           fi
           
+          # Combine header and changelog
+          FULL_CHANGELOG="${HEADER}
+          
+          ${CHANGELOG}"
+          
           # Output using EOF delimiter for multi-line support
           {
             echo 'changelog<<EOF'
-            echo "$CHANGELOG"
+            echo "$FULL_CHANGELOG"
             echo 'EOF'
           } >> $GITHUB_OUTPUT
           
           echo "Generated changelog:"
-          echo "$CHANGELOG"
+          echo "$FULL_CHANGELOG"
 
   publish:
     needs: [build, generate-changelog]
