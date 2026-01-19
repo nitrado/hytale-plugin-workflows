@@ -1,0 +1,140 @@
+name: GCS Publish (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      artifact-id:
+        description: "The artifact ID (jar name prefix)"
+        type: string
+        required: true
+      version:
+        description: "The version to publish"
+        type: string
+        required: true
+      tag-name:
+        description: "The GitHub release tag name"
+        type: string
+        required: true
+    secrets:
+      GCP_CREDENTIALS:
+        description: "GCP credentials JSON"
+        required: false
+      GCS_BUCKET:
+        description: "GCS bucket for artifact upload"
+        required: false
+
+  workflow_dispatch:
+
+jobs:
+  publish-gcs:
+    if: ${{ github.repository != 'nitrado/hytale-plugin-workflows' }}
+    runs-on: ubuntu-latest
+    env:
+      HAVE_GCP: ${{ secrets.GCP_CREDENTIALS != '' }}
+      HAVE_GCS_BUCKET: ${{ secrets.GCS_BUCKET != '' }}
+    steps:
+      - name: Resolve version from tag
+        id: resolve
+        run: |
+          # For workflow_call, use inputs.tag-name; for workflow_dispatch, use GITHUB_REF
+          if [[ -n "${{ inputs.tag-name }}" ]]; then
+            TAG_NAME="${{ inputs.tag-name }}"
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+          else
+            echo "ERROR: Must be triggered on a tag (current ref: $GITHUB_REF)"
+            exit 1
+          fi
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          # Strip leading 'v' for version
+          VERSION="${TAG_NAME#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Resolved version: $VERSION from tag: $TAG_NAME"
+
+      - name: Check GCP configuration
+        if: ${{ env.HAVE_GCP != 'true' || env.HAVE_GCS_BUCKET != 'true' }}
+        run: |
+          echo "GCP credentials or GCS bucket not configured, skipping publish"
+          exit 0
+
+      - name: Get artifact ID from release
+        id: artifact
+        if: ${{ env.HAVE_GCP == 'true' && env.HAVE_GCS_BUCKET == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG_NAME="${{ inputs.tag-name }}"
+          VERSION="${{ steps.resolve.outputs.version }}"
+          
+          # If artifact-id is provided as input, use it
+          if [[ -n "${{ inputs.artifact-id }}" ]]; then
+            echo "artifact_id=${{ inputs.artifact-id }}" >> $GITHUB_OUTPUT
+            echo "Using provided artifact ID: ${{ inputs.artifact-id }}"
+            exit 0
+          fi
+          
+          # Otherwise, try to detect from release assets
+          ASSETS=$(gh api repos/${{ github.repository }}/releases/tags/$TAG_NAME --jq '.assets[].name' 2>/dev/null || echo "")
+          
+          # Find a jar file and extract artifact ID
+          JAR_NAME=$(echo "$ASSETS" | grep -E "\.jar$" | grep -v "^original-" | head -n 1)
+          
+          if [[ -z "$JAR_NAME" ]]; then
+            echo "ERROR: Could not find jar in release assets"
+            echo "Available assets:"
+            echo "$ASSETS"
+            exit 1
+          fi
+          
+          # Extract artifact ID by removing version suffix
+          ARTIFACT_ID=$(echo "$JAR_NAME" | sed "s/-${VERSION}\.jar$//")
+          echo "artifact_id=$ARTIFACT_ID" >> $GITHUB_OUTPUT
+          echo "Detected artifact ID: $ARTIFACT_ID"
+
+      - name: Download release assets
+        if: ${{ env.HAVE_GCP == 'true' && env.HAVE_GCS_BUCKET == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG_NAME="${{ steps.resolve.outputs.tag_name }}"
+          VERSION="${{ steps.resolve.outputs.version }}"
+          ARTIFACT_ID="${{ steps.artifact.outputs.artifact_id }}"
+          
+          JAR_NAME="${ARTIFACT_ID}-${VERSION}.jar"
+          ZIP_NAME="${ARTIFACT_ID}-${VERSION}.zip"
+          
+          echo "Downloading jar from release: $JAR_NAME"
+          gh release download "$TAG_NAME" --repo "${{ github.repository }}" --pattern "$JAR_NAME" || {
+            echo "ERROR: Failed to download $JAR_NAME from release $TAG_NAME"
+            exit 1
+          }
+          
+          # Check if zip exists in release, otherwise create it
+          if gh release download "$TAG_NAME" --repo "${{ github.repository }}" --pattern "$ZIP_NAME" 2>/dev/null; then
+            echo "Downloaded existing zip from release"
+          else
+            echo "Creating zip archive"
+            mkdir -p dist
+            mv "$JAR_NAME" dist/
+            cd dist
+            zip -r "../$ZIP_NAME" .
+            cd ..
+            mv "dist/$JAR_NAME" .
+          fi
+          
+          echo "Files ready for upload:"
+          ls -la
+
+      - name: Log in to Google Cloud
+        if: ${{ env.HAVE_GCP == 'true' && env.HAVE_GCS_BUCKET == 'true' }}
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Upload to Google Cloud Storage
+        if: ${{ env.HAVE_GCP == 'true' && env.HAVE_GCS_BUCKET == 'true' }}
+        uses: google-github-actions/upload-cloud-storage@v3
+        with:
+          path: ${{ steps.artifact.outputs.artifact_id }}-${{ steps.resolve.outputs.version }}.zip
+          destination: ${{ secrets.GCS_BUCKET }}
+

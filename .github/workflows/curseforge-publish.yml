@@ -3,16 +3,16 @@ name: CurseForge Publish (Reusable)
 on:
   workflow_call:
     inputs:
-      artifact-name:
-        description: "Name of the artifact to download (from a previous job)"
-        type: string
-        default: "build-artifacts"
       artifact-id:
         description: "The artifact ID (jar name prefix)"
         type: string
         required: true
       version:
         description: "The version to publish"
+        type: string
+        required: true
+      tag-name:
+        description: "The GitHub release tag name"
         type: string
         required: true
       release-type:
@@ -22,7 +22,7 @@ on:
       game-endpoint:
         description: "The subdomain of curseforge.com (e.g., minecraft, kerbal, hytale)"
         type: string
-        default: "1430699"
+        default: "authors"
       game-versions:
         description: "Game version IDs (comma-separated)"
         type: string
@@ -47,21 +47,141 @@ on:
         description: "CurseForge project ID (numerical)"
         required: false
 
+  workflow_dispatch:
+    inputs:
+      release-type:
+        description: "The release type (release|beta|alpha)"
+        type: choice
+        options:
+          - release
+          - beta
+          - alpha
+        default: "release"
+      game-endpoint:
+        description: "The subdomain of curseforge.com"
+        type: string
+        default: "authors"
+      game-versions:
+        description: "Game version IDs (comma-separated)"
+        type: string
+        default: ""
+      changelog-type:
+        description: "The type of changelog"
+        type: choice
+        options:
+          - markdown
+          - text
+          - html
+        default: "markdown"
+      relations:
+        description: "Project relations (format: projectslug:relationType, comma-separated)"
+        type: string
+        default: ""
+
 jobs:
   publish-curseforge:
     if: ${{ github.repository != 'nitrado/hytale-plugin-workflows' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Download Build Artifacts
-        uses: actions/download-artifact@v7
-        with:
-          name: ${{ inputs.artifact-name }}
+      - name: Resolve version and artifact info
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # For workflow_call, use inputs.tag-name; for workflow_dispatch, use GITHUB_REF
+          if [[ -n "${{ inputs.tag-name }}" ]]; then
+            TAG_NAME="${{ inputs.tag-name }}"
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+          else
+            echo "ERROR: Must be triggered on a tag (current ref: $GITHUB_REF)"
+            exit 1
+          fi
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          
+          # Strip leading 'v' for version
+          VERSION="${TAG_NAME#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Resolved version: $VERSION from tag: $TAG_NAME"
+          
+          # If artifact-id is provided as input, use it
+          if [[ -n "${{ inputs.artifact-id }}" ]]; then
+            echo "artifact_id=${{ inputs.artifact-id }}" >> $GITHUB_OUTPUT
+            echo "Using provided artifact ID: ${{ inputs.artifact-id }}"
+            exit 0
+          fi
+          
+          # Otherwise, try to detect from release assets
+          ASSETS=$(gh api repos/${{ github.repository }}/releases/tags/$TAG_NAME --jq '.assets[].name' 2>/dev/null || echo "")
+          
+          # Find a jar file and extract artifact ID
+          JAR_NAME=$(echo "$ASSETS" | grep -E "\.jar$" | grep -v "^original-" | head -n 1)
+          
+          if [[ -z "$JAR_NAME" ]]; then
+            echo "ERROR: Could not find jar in release assets"
+            echo "Available assets:"
+            echo "$ASSETS"
+            exit 1
+          fi
+          
+          # Extract artifact ID by removing version suffix
+          ARTIFACT_ID=$(echo "$JAR_NAME" | sed "s/-${VERSION}\.jar$//")
+          echo "artifact_id=$ARTIFACT_ID" >> $GITHUB_OUTPUT
+          echo "Detected artifact ID: $ARTIFACT_ID"
+
+      - name: Fetch changelog from release
+        id: changelog
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG_NAME="${{ steps.resolve.outputs.tag_name }}"
+          
+          # If changelog is provided via workflow_call, use it
+          if [[ -n "${{ inputs.changelog }}" && "${{ inputs.changelog }}" != "Automated Build & Release from GitHub" ]]; then
+            {
+              echo 'changelog<<EOF'
+              echo "${{ inputs.changelog }}"
+              echo 'EOF'
+            } >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Otherwise, fetch from release
+          RELEASE_BODY=$(gh api repos/${{ github.repository }}/releases/tags/$TAG_NAME --jq '.body // empty' 2>/dev/null || echo "")
+          
+          if [[ -n "$RELEASE_BODY" ]]; then
+            {
+              echo 'changelog<<EOF'
+              echo "$RELEASE_BODY"
+              echo 'EOF'
+            } >> $GITHUB_OUTPUT
+          else
+            echo "changelog=Automated Build & Release from GitHub" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download jar from release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG_NAME="${{ steps.resolve.outputs.tag_name }}"
+          VERSION="${{ steps.resolve.outputs.version }}"
+          ARTIFACT_ID="${{ steps.resolve.outputs.artifact_id }}"
+          JAR_NAME="${ARTIFACT_ID}-${VERSION}.jar"
+          
+          echo "Downloading jar from release: $JAR_NAME"
+          gh release download "$TAG_NAME" --repo "${{ github.repository }}" --pattern "$JAR_NAME" || {
+            echo "ERROR: Failed to download $JAR_NAME from release $TAG_NAME"
+            exit 1
+          }
+          
+          echo "Downloaded files:"
+          ls -la
 
       - name: Upload to CurseForge
         env:
           CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
           CURSEFORGE_PROJECT_ID: ${{ secrets.CURSEFORGE_PROJECT_ID }}
-          CHANGELOG: ${{ inputs.changelog }}
+          CHANGELOG: ${{ steps.changelog.outputs.changelog }}
         run: |
           # Check if secrets are configured
           if [[ -z "$CURSEFORGE_TOKEN" || -z "$CURSEFORGE_PROJECT_ID" ]]; then
@@ -69,18 +189,18 @@ jobs:
             exit 0
           fi
           
-          # Find the built jar
-          JAR_PATH=$(find . -name "${{ inputs.artifact-id }}-${{ inputs.version }}.jar" -print | head -n 1)
+          VERSION="${{ steps.resolve.outputs.version }}"
+          ARTIFACT_ID="${{ steps.resolve.outputs.artifact_id }}"
+          JAR_PATH="./${ARTIFACT_ID}-${VERSION}.jar"
           
-          if [[ -z "$JAR_PATH" ]]; then
-            echo "ERROR: Could not find jar file matching ${{ inputs.artifact-id }}-${{ inputs.version }}.jar"
-            echo "Available files:"
-            find . -name "*.jar" -print
+          if [[ ! -f "$JAR_PATH" ]]; then
+            echo "ERROR: Could not find jar file at $JAR_PATH"
+            ls -la
             exit 1
           fi
           
           echo "Found Jar: $JAR_PATH"
-          echo "Publishing Version: ${{ inputs.version }}"
+          echo "Publishing Version: $VERSION"
           echo "Game Versions: ${{ inputs.game-versions }}"
           
           # Build game versions JSON block (only if provided)
@@ -111,7 +231,7 @@ jobs:
           {
             "changelog": $(jq -Rs . < "$CHANGELOG_FILE"),
             "changelogType": "${{ inputs.changelog-type }}",
-            "displayName": "${{ inputs.artifact-id }}-${{ inputs.version }}",
+            "displayName": "${ARTIFACT_ID}-${VERSION}",
             "releaseType": "${{ inputs.release-type }}"$GAME_VERSIONS_BLOCK$RELATIONS_BLOCK
           }
           EOF

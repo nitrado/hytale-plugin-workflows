@@ -84,6 +84,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Determine version
         id: version
@@ -191,13 +193,73 @@ jobs:
             !target/original-*.jar
           retention-days: ${{ inputs.artifact-retention-days }}
 
-  publish:
+  generate-changelog:
     needs: [build]
     if: ${{ needs.build.outputs.is_release == 'true' && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
-    env:
-      HAVE_GCP: ${{ secrets.GCP_CREDENTIALS != '' }}
-      HAVE_GCS_BUCKET: ${{ secrets.GCS_BUCKET != '' }}
+    outputs:
+      changelog: ${{ steps.changelog.outputs.changelog }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          TAG_NAME="${{ needs.build.outputs.tag_name }}"
+          IS_PRERELEASE="${{ needs.build.outputs.is_prerelease }}"
+          
+          echo "Generating changelog for tag: $TAG_NAME (prerelease: $IS_PRERELEASE)"
+          
+          # Get all tags sorted by version
+          ALL_TAGS=$(git tag -l 'v*' --sort=-v:refname)
+          
+          # Determine the comparison base tag
+          if [[ "$IS_PRERELEASE" == "true" ]]; then
+            # For prereleases: find previous release OR prerelease (any tag)
+            PREV_TAG=$(echo "$ALL_TAGS" | grep -v "^${TAG_NAME}$" | head -n 1)
+            echo "Prerelease: comparing against previous tag: $PREV_TAG"
+          else
+            # For full releases: find previous full release (no suffix after vX.Y.Z)
+            FULL_RELEASE_REGEX='^v[0-9]+\.[0-9]+\.[0-9]+$'
+            PREV_TAG=""
+            for tag in $ALL_TAGS; do
+              if [[ "$tag" != "$TAG_NAME" && "$tag" =~ $FULL_RELEASE_REGEX ]]; then
+                PREV_TAG="$tag"
+                break
+              fi
+            done
+            echo "Full release: comparing against previous full release: $PREV_TAG"
+          fi
+          
+          if [[ -z "$PREV_TAG" ]]; then
+            echo "No previous tag found, using initial commit"
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" "$TAG_NAME")
+          else
+            echo "Generating changelog from $PREV_TAG to $TAG_NAME"
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" "$PREV_TAG..$TAG_NAME")
+          fi
+          
+          if [[ -z "$CHANGELOG" ]]; then
+            CHANGELOG="No changes recorded"
+          fi
+          
+          # Output using EOF delimiter for multi-line support
+          {
+            echo 'changelog<<EOF'
+            echo "$CHANGELOG"
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
+          
+          echo "Generated changelog:"
+          echo "$CHANGELOG"
+
+  publish:
+    needs: [build, generate-changelog]
+    if: ${{ needs.build.outputs.is_release == 'true' && needs.build.result == 'success' }}
+    runs-on: ubuntu-latest
     steps:
       - name: Download Build Artifacts
         uses: actions/download-artifact@v7
@@ -220,161 +282,63 @@ jobs:
           tag_name: ${{ needs.build.outputs.tag_name }}
           name: Release ${{ needs.build.outputs.version }}
           prerelease: ${{ needs.build.outputs.is_prerelease == 'true' }}
+          body: ${{ needs.generate-changelog.outputs.changelog }}
           files: |
             ${{ needs.build.outputs.artifact_id }}-${{ needs.build.outputs.version }}.zip
             dist/${{ needs.build.outputs.artifact_id }}-${{ needs.build.outputs.version }}.jar
-          generate_release_notes: true
 
-      - name: Log in to Google Cloud
-        if: ${{ success() && env.HAVE_GCP == 'true' }}
-        uses: google-github-actions/auth@v3
-        with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
-
-      - name: Upload to Google Cloud Storage
-        if: ${{ success() && env.HAVE_GCP == 'true' && env.HAVE_GCS_BUCKET == 'true' }}
-        uses: google-github-actions/upload-cloud-storage@v3
-        with:
-          path: ${{ needs.build.outputs.artifact_id }}-${{ needs.build.outputs.version }}.zip
-          destination: ${{ secrets.GCS_BUCKET }}
+  publish-gcs:
+    needs: [build, publish]
+    if: ${{ needs.build.outputs.is_release == 'true' && needs.publish.result == 'success' }}
+    uses: ./.github/workflows/gcs-publish.yml
+    with:
+      artifact-id: ${{ needs.build.outputs.artifact_id }}
+      version: ${{ needs.build.outputs.version }}
+      tag-name: ${{ needs.build.outputs.tag_name }}
+    secrets:
+      GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
+      GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
 
   publish-maven:
-    needs: [build]
-    if: ${{ needs.build.outputs.is_release == 'true' && needs.build.result == 'success' }}
-    runs-on: ubuntu-latest
-    env:
-      HAVE_MAVEN_PUBLISH: ${{ secrets.MAVEN_PUBLISH_URL != '' && secrets.MAVEN_PUBLISH_USERNAME != '' && secrets.MAVEN_PUBLISH_PASSWORD != '' }}
-      HAVE_MAVEN_REPO: ${{ secrets.MAVEN_REPO_URL != '' && secrets.MAVEN_USERNAME != '' && secrets.MAVEN_PASSWORD != '' }}
-    steps:
-      - name: Checkout
-        if: ${{ env.HAVE_MAVEN_PUBLISH == 'true' }}
-        uses: actions/checkout@v6
-
-      - name: Set up Java
-        if: ${{ env.HAVE_MAVEN_PUBLISH == 'true' }}
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: ${{ inputs.java-version-publish }}
-          cache: maven
-
-      - name: Set up Maven settings.xml for publishing
-        if: ${{ env.HAVE_MAVEN_PUBLISH == 'true' }}
-        env:
-          MAVEN_REPO_URL: ${{ secrets.MAVEN_REPO_URL }}
-          MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
-          MAVEN_PASSWORD: ${{ secrets.MAVEN_PASSWORD }}
-        run: |
-          mkdir -p $HOME/.m2
-          
-          # Build servers section
-          SERVERS="<server>
-                <id>publish-repo</id>
-                <username>${{ secrets.MAVEN_PUBLISH_USERNAME }}</username>
-                <password>${{ secrets.MAVEN_PUBLISH_PASSWORD }}</password>
-              </server>"
-          
-          PROFILES=""
-          ACTIVE_PROFILES=""
-          
-          # Add custom repo for dependencies if configured
-          if [[ -n "$MAVEN_REPO_URL" && -n "$MAVEN_USERNAME" && -n "$MAVEN_PASSWORD" ]]; then
-            SERVERS="$SERVERS
-              <server>
-                <id>custom-repo</id>
-                <username>$MAVEN_USERNAME</username>
-                <password>$MAVEN_PASSWORD</password>
-              </server>"
-            
-            PROFILES="<profiles>
-              <profile>
-                <id>additional-repo</id>
-                <repositories>
-                  <repository>
-                    <id>custom-repo</id>
-                    <url>$MAVEN_REPO_URL</url>
-                  </repository>
-                </repositories>
-              </profile>
-            </profiles>"
-            
-            ACTIVE_PROFILES="<activeProfiles>
-              <activeProfile>additional-repo</activeProfile>
-            </activeProfiles>"
-          fi
-          
-          cat > $HOME/.m2/settings.xml << EOF
-          <settings>
-            <servers>
-              $SERVERS
-            </servers>
-            $PROFILES
-            $ACTIVE_PROFILES
-          </settings>
-          EOF
-
-      - name: Deploy to Maven repository
-        if: ${{ env.HAVE_MAVEN_PUBLISH == 'true' }}
-        run: >
-          mvn -B -V
-          clean
-          deploy
-          -Drevision=${{ needs.build.outputs.version }}
-          -DaltDeploymentRepository=publish-repo::${{ secrets.MAVEN_PUBLISH_URL }}
-          -DskipTests
-
-  fetch-release-notes:
     needs: [build, publish]
-    if: ${{ needs.build.outputs.is_release == 'true' && needs.build.result == 'success' && needs.publish.result == 'success' }}
-    runs-on: ubuntu-latest
-    outputs:
-      changelog: ${{ steps.get-notes.outputs.changelog }}
-    steps:
-      - name: Fetch GitHub Release Notes
-        id: get-notes
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          TAG_NAME="${{ needs.build.outputs.tag_name }}"
-          echo "Fetching release notes for tag: $TAG_NAME"
-          
-          RELEASE_BODY=$(gh api repos/${{ github.repository }}/releases/tags/$TAG_NAME --jq '.body // empty' 2>/dev/null || echo "")
-          
-          if [[ -n "$RELEASE_BODY" ]]; then
-            echo "Found GitHub release notes"
-            # Use EOF delimiter to handle multi-line output
-            {
-              echo 'changelog<<EOF'
-              echo "$RELEASE_BODY"
-              echo 'EOF'
-            } >> $GITHUB_OUTPUT
-          else
-            echo "No GitHub release notes found, using default"
-            echo "changelog=Automated Build & Release from GitHub" >> $GITHUB_OUTPUT
-          fi
+    if: ${{ needs.build.outputs.is_release == 'true' && needs.publish.result == 'success' }}
+    uses: ./.github/workflows/maven-publish.yml
+    with:
+      java-version: ${{ inputs.java-version-publish }}
+      version: ${{ needs.build.outputs.version }}
+      tag-name: ${{ needs.build.outputs.tag_name }}
+    secrets:
+      MAVEN_REPO_URL: ${{ secrets.MAVEN_REPO_URL }}
+      MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
+      MAVEN_PASSWORD: ${{ secrets.MAVEN_PASSWORD }}
+      MAVEN_PUBLISH_URL: ${{ secrets.MAVEN_PUBLISH_URL }}
+      MAVEN_PUBLISH_USERNAME: ${{ secrets.MAVEN_PUBLISH_USERNAME }}
+      MAVEN_PUBLISH_PASSWORD: ${{ secrets.MAVEN_PUBLISH_PASSWORD }}
 
   publish-modtale:
-    needs: [build, publish, fetch-release-notes]
-    if: ${{ needs.build.outputs.is_release == 'true' }}
+    needs: [build, publish, generate-changelog]
+    if: ${{ needs.build.outputs.is_release == 'true' && needs.publish.result == 'success' }}
     uses: ./.github/workflows/modtale-publish.yml
     with:
       artifact-id: ${{ needs.build.outputs.artifact_id }}
       version: ${{ needs.build.outputs.version }}
+      tag-name: ${{ needs.build.outputs.tag_name }}
       channel: ${{ (needs.build.outputs.is_prerelease == 'true') && 'BETA' || 'RELEASE' }}
-      changelog: ${{ needs.fetch-release-notes.outputs.changelog }}
+      changelog: ${{ needs.generate-changelog.outputs.changelog }}
     secrets:
       MODTALE_API_KEY: ${{ secrets.MODTALE_API_KEY }}
       MODTALE_PROJECT_ID: ${{ secrets.MODTALE_PROJECT_ID }}
 
   publish-curseforge:
-    needs: [build, publish, fetch-release-notes]
-    if: ${{ needs.build.outputs.is_release == 'true' }}
+    needs: [build, publish, generate-changelog]
+    if: ${{ needs.build.outputs.is_release == 'true' && needs.publish.result == 'success' }}
     uses: ./.github/workflows/curseforge-publish.yml
     with:
       artifact-id: ${{ needs.build.outputs.artifact_id }}
       version: ${{ needs.build.outputs.version }}
+      tag-name: ${{ needs.build.outputs.tag_name }}
       release-type: ${{ (needs.build.outputs.is_prerelease == 'true') && 'beta' || 'release' }}
-      changelog: ${{ needs.fetch-release-notes.outputs.changelog }}
+      changelog: ${{ needs.generate-changelog.outputs.changelog }}
     secrets:
       CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
       CURSEFORGE_PROJECT_ID: ${{ secrets.CURSEFORGE_PROJECT_ID }}
