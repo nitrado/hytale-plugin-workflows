@@ -175,10 +175,6 @@ jobs:
           echo "Publishing Version: $VERSION"
           echo "Game Versions: ${{ inputs.game-versions }}"
           
-          # Strip suffix from version (e.g., 1.0.0-rc1 -> 1.0.0)
-          CLEAN_VERSION=$(echo "$VERSION" | sed 's/-.*//')
-          echo "Clean Version (for Modtale): $CLEAN_VERSION"
-          
           # Write changelog to temp file to handle all special characters safely
           CHANGELOG_FILE=$(mktemp)
           printf '%s' "$CHANGELOG" > "$CHANGELOG_FILE"
@@ -188,7 +184,7 @@ jobs:
             -H "X-MODTALE-KEY: $MODTALE_API_KEY" \
             -F "file=@$JAR_PATH" \
             -F "channel=${{ inputs.channel }}" \
-            -F "versionNumber=$CLEAN_VERSION" \
+            -F "versionNumber=$VERSION" \
             -F "gameVersions=${{ inputs.game-versions }}" \
             -F "changelog=<$CHANGELOG_FILE")
           
