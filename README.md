@@ -4,11 +4,21 @@ Reusable GitHub Actions workflows for building, testing, and publishing Hytale p
 
 ## Available Workflows
 
-### Plugin CI (`plugin-ci.yml`)
+| Workflow                                                              | Description                                                     |
+|-----------------------------------------------------------------------|-----------------------------------------------------------------|
+| [`plugin-ci.yml`](#plugin-ci-plugin-ciyml)                            | Complete CI/CD workflow for building, releasing, and publishing |
+| [`maven-publish.yml`](#maven-publish-maven-publishyml)                | Standalone Maven repository publishing                          |
+| [`gcs-publish.yml`](#gcs-publish-gcs-publishyml)                      | Standalone Google Cloud Storage publishing                      |
+| [`modtale-publish.yml`](#modtale-publish-modtale-publishyml)          | Standalone Modtale publishing                                   |
+| [`curseforge-publish.yml`](#curseforge-publish-curseforge-publishyml) | Standalone CurseForge publishing                                |
+
+---
+
+## Plugin CI (`plugin-ci.yml`)
 
 A complete CI/CD workflow for Java-based Hytale plugins that handles building, versioning, GitHub releases, Maven publishing, and GCS artifact uploads.
 
-## Usage
+### Usage
 
 Create a workflow file in your plugin repository (e.g., `.github/workflows/ci.yml`):
 
@@ -55,7 +65,7 @@ jobs:
   build:
     uses: nitrado/hytale-plugin-workflows/.github/workflows/plugin-ci.yml@main
     with:
-      java-version: "21"
+      java-version: "25"
       artifact-retention-days: 14
       has-manifest: false
     secrets:
@@ -149,7 +159,172 @@ jobs:
 
 If `MODTALE_API_KEY` or `MODTALE_PROJECT_ID` are not configured, the Modtale publish step is silently skipped.
 
-## Requirements
+---
+
+## Maven Publish (`maven-publish.yml`)
+
+Standalone workflow to publish artifacts to a Maven repository. Can be called from other repositories.
+
+### Usage
+
+```yaml
+jobs:
+  publish-maven:
+    uses: nitrado/hytale-plugin-workflows/.github/workflows/maven-publish.yml@main
+    with:
+      version: "1.0.0"
+      tag-name: "v1.0.0"
+      java-version: "25"  # optional, defaults to 25
+    secrets:
+      MAVEN_REPO_URL: ${{ secrets.MAVEN_REPO_URL }}
+      MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
+      MAVEN_PASSWORD: ${{ secrets.MAVEN_PASSWORD }}
+      MAVEN_PUBLISH_URL: ${{ secrets.MAVEN_PUBLISH_URL }}
+      MAVEN_PUBLISH_USERNAME: ${{ secrets.MAVEN_PUBLISH_USERNAME }}
+      MAVEN_PUBLISH_PASSWORD: ${{ secrets.MAVEN_PUBLISH_PASSWORD }}
+```
+
+### Inputs
+
+| Input          | Type   | Required | Default | Description                    |
+|----------------|--------|----------|---------|--------------------------------|
+| `version`      | string | Yes      | -       | The version to publish         |
+| `tag-name`     | string | Yes      | -       | The GitHub release tag name    |
+| `java-version` | string | No       | `"25"`  | Java version for Maven publish |
+
+### Secrets
+
+| Secret                   | Required | Description                         |
+|--------------------------|----------|-------------------------------------|
+| `MAVEN_REPO_URL`         | No       | Maven repository URL for deps       |
+| `MAVEN_USERNAME`         | No       | Maven repository username           |
+| `MAVEN_PASSWORD`         | No       | Maven repository password           |
+| `MAVEN_PUBLISH_URL`      | Yes      | Maven repository URL for publishing |
+| `MAVEN_PUBLISH_USERNAME` | Yes      | Maven publish username              |
+| `MAVEN_PUBLISH_PASSWORD` | Yes      | Maven publish password              |
+
+---
+
+## GCS Publish (`gcs-publish.yml`)
+
+Standalone workflow to upload release artifacts to Google Cloud Storage. Can be called from other repositories.
+
+### Usage
+
+```yaml
+jobs:
+  publish-gcs:
+    uses: nitrado/hytale-plugin-workflows/.github/workflows/gcs-publish.yml@main
+    with:
+      artifact-id: "my-plugin"
+      version: "1.0.0"
+      tag-name: "v1.0.0"
+    secrets:
+      GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
+      GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+```
+
+### Inputs
+
+| Input         | Type   | Required | Description                    |
+|---------------|--------|----------|--------------------------------|
+| `artifact-id` | string | Yes      | The artifact ID (jar prefix)   |
+| `version`     | string | Yes      | The version to publish         |
+| `tag-name`    | string | Yes      | The GitHub release tag name    |
+
+### Secrets
+
+| Secret            | Required | Description                    |
+|-------------------|----------|--------------------------------|
+| `GCP_CREDENTIALS` | Yes      | GCP credentials JSON           |
+| `GCS_BUCKET`      | Yes      | GCS bucket for artifact upload |
+
+---
+
+## Modtale Publish (`modtale-publish.yml`)
+
+Standalone workflow to publish releases to [Modtale](https://modtale.net). Can be called from other repositories.
+
+### Usage
+
+```yaml
+jobs:
+  publish-modtale:
+    uses: nitrado/hytale-plugin-workflows/.github/workflows/modtale-publish.yml@main
+    with:
+      artifact-id: "my-plugin"
+      version: "1.0.0"
+      tag-name: "v1.0.0"
+      channel: "RELEASE"  # optional: RELEASE, BETA, or ALPHA
+      game-versions: "1.0-SNAPSHOT"  # optional
+    secrets:
+      MODTALE_API_KEY: ${{ secrets.MODTALE_API_KEY }}
+      MODTALE_PROJECT_ID: ${{ secrets.MODTALE_PROJECT_ID }}
+```
+
+### Inputs
+
+| Input           | Type   | Required | Default                          | Description                       |
+|-----------------|--------|----------|----------------------------------|-----------------------------------|
+| `artifact-id`   | string | Yes      | -                                | The artifact ID (jar prefix)      |
+| `version`       | string | Yes      | -                                | The version to publish            |
+| `tag-name`      | string | Yes      | -                                | The GitHub release tag name       |
+| `channel`       | string | No       | `"RELEASE"`                      | Channel: RELEASE, BETA, or ALPHA  |
+| `game-versions` | string | No       | `"1.0-SNAPSHOT"`                 | Hytale versions (comma-separated) |
+| `changelog`     | string | No       | `"Automated Build & Release..."` | Changelog for this version        |
+
+### Secrets
+
+| Secret               | Required | Description          |
+|----------------------|----------|----------------------|
+| `MODTALE_API_KEY`    | Yes      | Modtale API key      |
+| `MODTALE_PROJECT_ID` | Yes      | Modtale project ID   |
+
+---
+
+## CurseForge Publish (`curseforge-publish.yml`)
+
+Standalone workflow to publish releases to CurseForge. Can be called from other repositories.
+
+### Usage
+
+```yaml
+jobs:
+  publish-curseforge:
+    uses: nitrado/hytale-plugin-workflows/.github/workflows/curseforge-publish.yml@main
+    with:
+      artifact-id: "my-plugin"
+      version: "1.0.0"
+      tag-name: "v1.0.0"
+      release-type: "release"  # optional: release, beta, or alpha
+      game-endpoint: "hytale"  # optional
+    secrets:
+      CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+      CURSEFORGE_PROJECT_ID: ${{ secrets.CURSEFORGE_PROJECT_ID }}
+```
+
+### Inputs
+
+| Input            | Type   | Required | Default                          | Description                              |
+|------------------|--------|----------|----------------------------------|------------------------------------------|
+| `artifact-id`    | string | Yes      | -                                | The artifact ID (jar prefix)             |
+| `version`        | string | Yes      | -                                | The version to publish                   |
+| `tag-name`       | string | Yes      | -                                | The GitHub release tag name              |
+| `release-type`   | string | No       | `"release"`                      | Type: release, beta, or alpha            |
+| `game-endpoint`  | string | No       | `"authors"`                      | CurseForge subdomain (e.g., hytale)      |
+| `game-versions`  | string | No       | `""`                             | Game version IDs (comma-separated)       |
+| `changelog`      | string | No       | `"Automated Build & Release..."` | Changelog for this version               |
+| `changelog-type` | string | No       | `"markdown"`                     | Changelog type: text, html, or markdown  |
+| `relations`      | string | No       | `""`                             | Project relations (slug:type, comma-sep) |
+
+### Secrets
+
+| Secret                  | Required | Description                     |
+|-------------------------|----------|---------------------------------|
+| `CURSEFORGE_TOKEN`      | Yes      | CurseForge API token            |
+| `CURSEFORGE_PROJECT_ID` | Yes      | CurseForge project ID (numeric) |
+
+---## Requirements
 
 - Your project must use Maven
 - The `pom.xml` should support the `-Drevision` property for version injection
