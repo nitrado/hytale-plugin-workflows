@@ -125,6 +125,33 @@ Tags must follow semver format with a leading `v` (e.g., `v1.0.0`, `v2.1.0-beta1
    - Fetches GitHub-generated release notes
    - Publishes to [Modtale](https://modtale.net) with appropriate channel (RELEASE or BETA based on prerelease status)
 
+## Manual Approval for External Publishing
+
+External platform publishing (GCS, Maven, Modtale, CurseForge) requires manual approval via a GitHub environment. This
+allows you to review and edit the GitHub Release notes before they are pushed to external platforms.
+
+### Setup
+
+Each repository using these workflows must configure the environment:
+
+1. Go to **your plugin repository's** Settings → Environments
+2. Create a new environment named `publish-external`
+3. Enable **Required reviewers** and add the appropriate approvers
+4. Optionally configure a wait timer or deployment branches
+
+> **Important:** The `publish-external` environment must be configured in each repository that calls these workflows—not in this workflows repository.
+
+### Workflow Behavior
+
+After a release tag is pushed:
+1. The **build** and **generate-changelog** jobs run automatically
+2. The **publish** job creates the GitHub Release with auto-generated notes
+3. The workflow **pauses** and waits for approval on the `publish-external` environment
+4. You can edit the GitHub Release notes during this time
+5. Once approved, all external publish jobs (GCS, Maven, Modtale, CurseForge) proceed in parallel
+
+> **Note:** Without the `publish-external` environment configured with required reviewers, the external publish jobs will run immediately after the GitHub Release is created.
+
 ## Modtale Publishing
 
 The workflow automatically publishes releases to Modtale when the required secrets are configured. No additional inputs are needed—publishing is triggered for all release builds.

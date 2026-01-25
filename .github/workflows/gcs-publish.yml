@@ -29,6 +29,7 @@ jobs:
   publish-gcs:
     if: ${{ github.repository != 'nitrado/hytale-plugin-workflows' }}
     runs-on: ubuntu-latest
+    environment: publish-external
     env:
       HAVE_GCP: ${{ secrets.GCP_CREDENTIALS != '' }}
       HAVE_GCS_BUCKET: ${{ secrets.GCS_BUCKET != '' }}

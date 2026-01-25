@@ -46,6 +46,7 @@ jobs:
   publish-maven:
     if: ${{ github.repository != 'nitrado/hytale-plugin-workflows' }}
     runs-on: ubuntu-latest
+    environment: publish-external
     env:
       HAVE_MAVEN_PUBLISH: ${{ secrets.MAVEN_PUBLISH_URL != '' && secrets.MAVEN_PUBLISH_USERNAME != '' && secrets.MAVEN_PUBLISH_PASSWORD != '' }}
       HAVE_MAVEN_REPO: ${{ secrets.MAVEN_REPO_URL != '' && secrets.MAVEN_USERNAME != '' && secrets.MAVEN_PASSWORD != '' }}

@@ -34,6 +34,7 @@ jobs:
   publish-modtale:
     if: ${{ github.repository != 'nitrado/hytale-plugin-workflows' }}
     runs-on: ubuntu-latest
+    environment: publish-external
     steps:
       - name: Resolve version and artifact info
         id: resolve
