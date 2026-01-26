@@ -278,6 +278,10 @@ jobs:
           fi
           
           PREV_VERSION="${PREV_TAG#v}"
+          CURRENT_VERSION="${TAG_NAME#v}"
+          
+          # Extract base version (without prerelease suffix) for prerelease notice
+          BASE_VERSION="${CURRENT_VERSION%%-*}"
           
           if [[ -z "$PREV_TAG" ]]; then
             echo "No previous tag found, using initial commit"
@@ -286,12 +290,18 @@ jobs:
               -f tag_name="$TAG_NAME" \
               --jq '.body')
           else
-            HEADER="Changes since ${PREV_VERSION}:"
+            HEADER="# Automatically Generated Changelog\nBelow are the changes since \`${PREV_VERSION}\`."
             echo "Generating changelog from $PREV_TAG to $TAG_NAME"
             CHANGELOG=$(gh api repos/${{ github.repository }}/releases/generate-notes \
               -f tag_name="$TAG_NAME" \
               -f previous_tag_name="$PREV_TAG" \
               --jq '.body')
+          fi
+          
+          # Add prerelease notice if applicable
+          if [[ "$IS_PRERELEASE" == "true" ]]; then
+            PRERELEASE_NOTICE="# This is a Pre-Release.\nThe changes below will be included in the next full release, version \`${BASE_VERSION}\`.\n\n"
+            HEADER="${PRERELEASE_NOTICE}${HEADER}"
           fi
           
           if [[ -z "$CHANGELOG" ]]; then
