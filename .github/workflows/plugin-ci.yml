@@ -244,18 +244,30 @@ jobs:
           
           echo "Generating changelog for tag: $TAG_NAME (prerelease: $IS_PRERELEASE)"
           
-          # Get all tags sorted by version
-          ALL_TAGS=$(git tag -l 'v*' --sort=-v:refname)
+          # Get all semver tags sorted descending by commit date (most recent first)
+          # This ensures we get chronologically previous tags correctly
+          SEMVER_REGEX='^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'
+          ALL_TAGS=$(git tag -l 'v*' --sort=-creatordate | while read tag; do
+            if [[ "$tag" =~ $SEMVER_REGEX ]]; then
+              echo "$tag"
+            fi
+          done)
           
           # Determine the comparison base tag
+          FULL_RELEASE_REGEX='^v[0-9]+\.[0-9]+\.[0-9]+$'
+          PREV_TAG=""
+          
           if [[ "$IS_PRERELEASE" == "true" ]]; then
-            # For prereleases: find previous release OR prerelease (any tag)
-            PREV_TAG=$(echo "$ALL_TAGS" | grep -v "^${TAG_NAME}$" | head -n 1)
+            # For prereleases: find previous release OR prerelease (any tag that came before)
+            for tag in $ALL_TAGS; do
+              if [[ "$tag" != "$TAG_NAME" ]]; then
+                PREV_TAG="$tag"
+                break
+              fi
+            done
             echo "Prerelease: comparing against previous tag: $PREV_TAG"
           else
-            # For full releases: find previous full release (no suffix after vX.Y.Z)
-            FULL_RELEASE_REGEX='^v[0-9]+\.[0-9]+\.[0-9]+$'
-            PREV_TAG=""
+            # For full releases: find previous full release only (no prerelease suffix)
             for tag in $ALL_TAGS; do
               if [[ "$tag" != "$TAG_NAME" && "$tag" =~ $FULL_RELEASE_REGEX ]]; then
                 PREV_TAG="$tag"
