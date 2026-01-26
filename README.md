@@ -89,11 +89,12 @@ jobs:
 
 ## Outputs
 
-| Output        | Description                                      |
-|---------------|--------------------------------------------------|
-| `version`     | The resolved version string                      |
-| `artifact_id` | The Maven artifact ID                            |
-| `is_release`  | Whether this is a release build (`true`/`false`) |
+| Output                  | Description                                      |
+|-------------------------|--------------------------------------------------|
+| `version`               | The resolved version string                      |
+| `artifact_id`           | The Maven artifact ID                            |
+| `is_release`            | Whether this is a release build (`true`/`false`) |
+| `hytale_server_version` | The Hytale Server version used for building      |
 
 ## Versioning Behavior
 
@@ -109,8 +110,9 @@ Tags must follow semver format with a leading `v` (e.g., `v1.0.0`, `v2.1.0-beta1
    - Checks out code
    - Sets up Java with Maven caching
    - Determines version from git tags
+   - Fetches the latest Hytale Server version from [maven.hytale.com](https://maven.hytale.com/release/com/hypixel/hytale/Server/maven-metadata.xml)
    - Updates `manifest.json` version (if enabled)
-   - Builds the project with `mvn package`
+   - Builds the project with `mvn package`, passing `-Dhytale.server.version=<version>`
    - Uploads JAR artifacts
 
 2. **Publish Job** (releases only)
@@ -182,7 +184,7 @@ jobs:
 - **Release tags** (e.g., `v1.0.0`): Published to the `RELEASE` channel
 - **Prerelease tags** (e.g., `v1.0.0-rc1`, `v1.0.0-beta2`): Published to the `BETA` channel
 - **Changelog**: Automatically uses GitHub-generated release notes
-- **Game versions**: Defaults to `1.0.0`
+- **Game versions**: Automatically set to the latest Hytale Server version (fetched from maven.hytale.com)
 
 If `MODTALE_API_KEY` or `MODTALE_PROJECT_ID` are not configured, the Modtale publish step is silently skipped.
 
@@ -355,4 +357,28 @@ jobs:
 
 - Your project must use Maven
 - The `pom.xml` should support the `-Drevision` property for version injection
+- The `pom.xml` should support the `-Dhytale.server.version` property for the Hytale Server dependency version (see example below)
 - For manifest updates, ensure `manifest.json` has a `"Version": "..."` field
+
+### Example `pom.xml` Configuration
+
+Your `pom.xml` should define properties with defaults that can be overridden via command line:
+
+```xml
+<properties>
+    <revision>1.0.0-SNAPSHOT</revision>
+    <hytale.server.version>1.0-SNAPSHOT</hytale.server.version>
+</properties>
+
+<dependencies>
+    <dependency>
+        <groupId>com.hypixel.hytale</groupId>
+        <artifactId>Server</artifactId>
+        <version>${hytale.server.version}</version>
+        <scope>provided</scope>
+    </dependency>
+</dependencies>
+```
+
+The workflow will automatically pass the latest Hytale Server version via `-Dhytale.server.version=<version>` during the build.
+

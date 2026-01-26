@@ -69,6 +69,9 @@ on:
       is_release:
         description: "Whether this is a release build"
         value: ${{ jobs.build.outputs.is_release }}
+      hytale_server_version:
+        description: "The Hytale Server version used for building"
+        value: ${{ jobs.build.outputs.hytale_server_version }}
 
 jobs:
   build:
@@ -80,6 +83,7 @@ jobs:
       is_release: ${{ steps.version.outputs.is_release }}
       is_prerelease: ${{ steps.version.outputs.is_prerelease }}
       artifact_id: ${{ steps.artifact.outputs.artifact_id }}
+      hytale_server_version: ${{ steps.hytale-version.outputs.hytale_server_version }}
 
     steps:
       - name: Checkout
@@ -121,6 +125,30 @@ jobs:
             echo "is_release=false" >> $GITHUB_OUTPUT
             echo "No tag detected, using snapshot version"
           fi
+
+      - name: Fetch latest Hytale Server version
+        id: hytale-version
+        run: |
+          echo "Fetching latest Hytale Server version from maven.hytale.com..."
+          METADATA_URL="https://maven.hytale.com/release/com/hypixel/hytale/Server/maven-metadata.xml"
+          
+          METADATA=$(curl -sf "$METADATA_URL") || {
+            echo "ERROR: Failed to fetch maven-metadata.xml from $METADATA_URL"
+            exit 1
+          }
+          
+          # Extract the latest version from <release> tag
+          SERVER_VERSION=$(echo "$METADATA" | grep -oP '(?<=<release>)[^<]+' | head -1)
+          
+          if [[ -z "$SERVER_VERSION" ]]; then
+            echo "ERROR: Could not parse Hytale Server version from maven-metadata.xml"
+            echo "Metadata content:"
+            echo "$METADATA"
+            exit 1
+          fi
+          
+          echo "hytale_server_version=$SERVER_VERSION" >> $GITHUB_OUTPUT
+          echo "Detected Hytale Server version: $SERVER_VERSION"
 
       - name: Set up Java
         uses: actions/setup-java@v5
@@ -182,6 +210,7 @@ jobs:
           clean
           package
           -Drevision=${{ steps.version.outputs.version }}
+          -Dhytale.server.version=${{ steps.hytale-version.outputs.hytale_server_version }}
 
       - name: Upload Build Artifacts
         if: ${{ success() }}
@@ -337,6 +366,7 @@ jobs:
     uses: ./.github/workflows/modtale-publish.yml
     with:
       artifact-id: ${{ needs.build.outputs.artifact_id }}
+      game-versions: ${{ needs.build.outputs.hytale_server_version }}
     secrets:
       MODTALE_API_KEY: ${{ secrets.MODTALE_API_KEY }}
       MODTALE_PROJECT_ID: ${{ secrets.MODTALE_PROJECT_ID }}
