@@ -6,7 +6,7 @@
 
     <groupId>com.example.test</groupId>
     <artifactId>hytale-test-plugin</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>${revision}</version>
 
     <properties>
         <maven.compiler.source>25</maven.compiler.source>
