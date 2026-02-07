@@ -1,10 +1,12 @@
 import * as core from "@actions/core";
 import * as exec from "@actions/exec";
 
-export async function buildPlugin(pluginPath: string) {
+export async function buildPlugin(
+  pluginPath: string,
+  version: string,
+  hytaleServerVersion: string,
+) {
   core.info("Starting Maven build...");
-  const version = core.getInput("version");
-  const hytaleServerVersion = core.getInput("hytale-server-version");
 
   const mvn = await exec.getExecOutput(
     "mvn",
