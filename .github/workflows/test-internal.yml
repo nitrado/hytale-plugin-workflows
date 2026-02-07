@@ -37,5 +37,6 @@ jobs:
         uses: ./
         with:
           java-version: '25'
+          plugin-path: './fixtures/hytale-test-plugin'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
