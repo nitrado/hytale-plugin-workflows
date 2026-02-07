@@ -5,6 +5,8 @@ on:
   push:
     branches:
       - feat/ts-action
+    tags:
+      - 'v*'
 
 jobs:
   test:
