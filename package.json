@@ -2,9 +2,14 @@
   "name": "nitrado-hytale-plugin-workflows",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./dist/index.js"
+  },
   "scripts": {
-    "build": "rollup -c",
+    "build": "pnpm run package",
+    "package": "rollup --config rollup.config.ts --configPlugin @rollup/plugin-typescript",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

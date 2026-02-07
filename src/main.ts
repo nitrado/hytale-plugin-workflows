@@ -1,5 +1,5 @@
 import * as core from "@actions/core";
-import { getArtifactId } from "./utils/pom";
+import { getArtifactId } from "./utils/pom.js";
 
 export async function run() {
   const pluginPath = core.getInput("plugin-path");
