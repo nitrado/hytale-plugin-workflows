@@ -14,6 +14,7 @@ export async function getLatestHytaleServerVersion(): Promise<string> {
   }
 
   const body = await response.readBody();
+
   const match = body.match(/<release>([^<]+)<\/release>/);
 
   if (!match) {
