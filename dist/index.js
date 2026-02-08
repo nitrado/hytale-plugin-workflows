@@ -2,7 +2,7 @@ import * as os from 'os';
 import os__default, { EOL as EOL$1 } from 'os';
 import * as crypto$1 from 'crypto';
 import * as fs from 'fs';
-import fs__default, { promises as promises$1, existsSync, readFileSync } from 'fs';
+import fs__default$1, { promises as promises$1, existsSync, readFileSync } from 'fs';
 import * as path$1 from 'path';
 import path__default, { normalize, resolve } from 'path';
 import * as http from 'http';
@@ -45,10 +45,12 @@ import https$1 from 'node:https';
 import require$$0$b from 'tty';
 import require$$5$4 from 'url';
 import { createHmac } from 'node:crypto';
-import fs$1 from 'node:fs';
+import * as fs$1 from 'node:fs';
+import fs__default from 'node:fs';
 import fs$2, { realpath } from 'fs/promises';
 import require$$0$d from 'constants';
-import path$2 from 'node:path';
+import * as path$2 from 'node:path';
+import path__default$1 from 'node:path';
 import require$$5$5 from 'node:fs/promises';
 import require$$2$1 from 'node:string_decoder';
 import require$$0$f from 'zlib';
@@ -75804,7 +75806,7 @@ async function streamToBuffer(stream, buffer, offset, end, encoding) {
  */
 async function readStreamToLocalFile(rs, file) {
     return new Promise((resolve, reject) => {
-        const ws = fs$1.createWriteStream(file);
+        const ws = fs__default.createWriteStream(file);
         rs.on("error", (err) => {
             reject(err);
         });
@@ -75820,8 +75822,8 @@ async function readStreamToLocalFile(rs, file) {
  *
  * Promisified version of fs.stat().
  */
-const fsStat = require$$0$9.promisify(fs$1.stat);
-const fsCreateReadStream = fs$1.createReadStream;
+const fsStat = require$$0$9.promisify(fs__default.stat);
+const fsCreateReadStream = fs__default.createReadStream;
 
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
@@ -79909,7 +79911,7 @@ function requireReaddirGlob () {
 	hasRequiredReaddirGlob = 1;
 	readdirGlob_1 = readdirGlob;
 
-	const fs = fs__default;
+	const fs = fs__default$1;
 	const { EventEmitter } = require$$1__default;
 	const { Minimatch } = requireMinimatch();
 	const { resolve } = path__default;
@@ -86740,7 +86742,7 @@ var hasRequiredGracefulFs;
 function requireGracefulFs () {
 	if (hasRequiredGracefulFs) return gracefulFs;
 	hasRequiredGracefulFs = 1;
-	var fs = fs__default;
+	var fs = fs__default$1;
 	var polyfills = requirePolyfills();
 	var legacy = requireLegacyStreams();
 	var clone = requireClone();
@@ -106063,10 +106065,10 @@ function requireCommonjs$1 () {
 	Object.defineProperty(commonjs$2, "__esModule", { value: true });
 	commonjs$2.PathScurry = commonjs$2.Path = commonjs$2.PathScurryDarwin = commonjs$2.PathScurryPosix = commonjs$2.PathScurryWin32 = commonjs$2.PathScurryBase = commonjs$2.PathPosix = commonjs$2.PathWin32 = commonjs$2.PathBase = commonjs$2.ChildrenCache = commonjs$2.ResolveCache = void 0;
 	const lru_cache_1 = /*@__PURE__*/ requireCommonjs$3();
-	const node_path_1 = path$2;
+	const node_path_1 = path__default$1;
 	const node_url_1 = require$$1$3;
-	const fs_1 = fs__default;
-	const actualFS = __importStar(fs$1);
+	const fs_1 = fs__default$1;
+	const actualFS = __importStar(fs__default);
 	const realpathSync = fs_1.realpathSync.native;
 	// TODO: test perf of fs/promises realpath vs realpathCB,
 	// since the promises one uses realpath.native
@@ -109929,7 +109931,7 @@ var hasRequiredCore;
 function requireCore () {
 	if (hasRequiredCore) return core;
 	hasRequiredCore = 1;
-	var fs = fs__default;
+	var fs = fs__default$1;
 	var glob = requireReaddirGlob();
 	var async = require$$2;
 	var path = path__default;
@@ -118726,7 +118728,7 @@ function requireMkdirp () {
 	if (hasRequiredMkdirp) return mkdirp;
 	hasRequiredMkdirp = 1;
 	var path = path__default;
-	var fs = fs__default;
+	var fs = fs__default$1;
 	var _0777 = parseInt('0777', 8);
 
 	mkdirp = mkdirP.mkdirp = mkdirP.mkdirP = mkdirP;
@@ -118836,7 +118838,7 @@ var hasRequiredExtract;
 function requireExtract () {
 	if (hasRequiredExtract) return extract;
 	hasRequiredExtract = 1;
-	var fs = fs__default;
+	var fs = fs__default$1;
 	var path = path__default;
 	var util = require$$0$3;
 	var mkdirp = requireMkdirp();
@@ -121246,15 +121248,14 @@ If the error persists, please check whether Actions and API requests are operati
 
 async function uploadGithubArtifact(artifactId, pluginPath) {
     const artifactName = "build-artifacts";
-    // Match the patterns from plugin-ci.yml exactly
     const patterns = [
-        path$2.join(pluginPath, "target", `${artifactId}-*.jar`),
-        `!${path$2.join(pluginPath, "target", "original-*.jar")}`,
+        path__default$1.join(pluginPath, "target", `${artifactId}-*.jar`),
+        `!${path__default$1.join(pluginPath, "target", "original-*.jar")}`,
     ];
     const globber = await create(patterns.join("\n"));
     const files = await globber.glob();
     if (files.length === 0) {
-        warning(`No artifacts found matching patterns in ${pluginPath}/target`);
+        warning(`failed to find any files in ${pluginPath}/target`);
         return;
     }
     info(`Uploading artifact(s): ${files.join(", ")}`);
@@ -121266,6 +121267,73 @@ async function uploadGithubArtifact(artifactId, pluginPath) {
     await artifactClient.uploadArtifact(artifactName, files, pluginPath, {
         retentionDays: retentionDays,
     });
+}
+
+/**
+ * Finds built JAR files in the target directory, excluding original-*.jar
+ */
+async function findBuildArtifacts(artifactId, pluginPath) {
+    const patterns = [
+        path$2.join(pluginPath, "target", `${artifactId}-*.jar`),
+        `!${path$2.join(pluginPath, "target", "original-*.jar")}`,
+    ];
+    const globber = await create(patterns.join("\n"));
+    return globber.glob();
+}
+/**
+ * Creates a GitHub Release and uploads JAR files as release assets
+ */
+async function createGithubRelease(versionInfo, changelog, artifactId, pluginPath) {
+    const { tagName, version, isPrerelease } = versionInfo;
+    if (!tagName) {
+        warning("No tag name available, skipping release creation");
+        return;
+    }
+    const token = getInput("github-token");
+    if (!token) {
+        setFailed("github-token is required to create a release");
+        return;
+    }
+    const octokit = getOctokit(token);
+    const { owner, repo } = context$2.repo;
+    // Find built JAR files
+    const jarFiles = await findBuildArtifacts(artifactId, pluginPath);
+    if (jarFiles.length === 0) {
+        setFailed(`No JAR files found in ${pluginPath}/target`);
+        return;
+    }
+    info(`Creating GitHub Release for ${tagName}...`);
+    // Create the release
+    const release = await octokit.rest.repos.createRelease({
+        owner,
+        repo,
+        tag_name: tagName,
+        name: `Release ${version}`,
+        body: changelog,
+        prerelease: isPrerelease,
+    });
+    const releaseId = release.data.id;
+    info(`Created release: ${release.data.html_url}`);
+    // Upload each JAR file as a release asset
+    for (const jarPath of jarFiles) {
+        const fileName = path$2.basename(jarPath);
+        const fileContent = fs$1.readFileSync(jarPath);
+        info(`Uploading release asset: ${fileName}`);
+        await octokit.rest.repos.uploadReleaseAsset({
+            owner,
+            repo,
+            release_id: releaseId,
+            name: fileName,
+            // @ts-expect-error - octokit types expect string but Buffer works
+            data: fileContent,
+            headers: {
+                "content-type": "application/java-archive",
+                "content-length": fileContent.length,
+            },
+        });
+        info(`Uploaded: ${fileName}`);
+    }
+    info(`GitHub Release created successfully: ${release.data.html_url}`);
 }
 
 async function run() {
@@ -121291,7 +121359,12 @@ async function run() {
     // 3. set up modtale credentials if required
     // 4. set up curseforge credentials if required
     await buildPlugin(pluginPath, versionInfo.version, hytaleServerVersion);
+    // Upload artifacts for CI inspection (all builds)
     await uploadGithubArtifact(artifactId, pluginPath);
+    // Create GitHub Release (only for tagged releases)
+    if (versionInfo.isRelease && changelog) {
+        await createGithubRelease(versionInfo, changelog, artifactId, pluginPath);
+    }
 }
 
 run();

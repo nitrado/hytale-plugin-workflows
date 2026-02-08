@@ -5,6 +5,7 @@ import { determineVersion } from "./utils/version.js";
 import { buildPlugin } from "./build/maven.js";
 import { generateChangelog } from "./publish/changelog.js";
 import { uploadGithubArtifact } from "./publish/artifact.js";
+import { createGithubRelease } from "./publish/release.js";
 
 export async function run() {
   const pluginPath = core.getInput("plugin-path");
@@ -36,5 +37,12 @@ export async function run() {
 
   await buildPlugin(pluginPath, versionInfo.version, hytaleServerVersion);
 
+  // i realized halfway through that we dont actually need this
+  // forgot that in workflwos youh have to in order to get it in another job
+  // buuuut, it might be useful for other things?????
   await uploadGithubArtifact(artifactId, pluginPath);
+
+  if (versionInfo.isRelease && changelog) {
+    await createGithubRelease(versionInfo, changelog, artifactId, pluginPath);
+  }
 }
