@@ -13,8 +13,5 @@ export async function getArtifactId(pluginPath: string): Promise<string> {
     return "";
   }
 
-  const artifactId = pom.stdout.toString().trim();
-  core.setOutput("artifact_id", artifactId);
-
-  return artifactId;
+  return pom.stdout.toString().trim();
 }

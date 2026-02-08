@@ -16,19 +16,21 @@ export async function determineVersion(): Promise<VersionInfo> {
     const tagName = githubRef.replace("refs/tags/", "");
 
     if (tagName.startsWith("v")) {
-      const versionWithoutV = tagName.slice(1);
+      const cleanVersion = tagName.slice(1);
 
-      if (valid(versionWithoutV)) {
-        const prereleaseComponents = prerelease(versionWithoutV);
+      if (valid(cleanVersion)) {
+        const prereleaseComponents = prerelease(cleanVersion);
         const isPrerelease =
           prereleaseComponents !== null && prereleaseComponents.length > 0;
 
+        const releaseType = isPrerelease ? "prerelease" : "release";
+
         core.info(
-          `Detected semver ${isPrerelease ? "prerelease" : "release"} tag: ${tagName} (version: ${versionWithoutV})`,
+          `Detected semver ${releaseType} tag: ${tagName} (version: ${cleanVersion})`,
         );
 
         return {
-          version: versionWithoutV,
+          version: cleanVersion,
           tagName,
           isRelease: true,
           isPrerelease,
