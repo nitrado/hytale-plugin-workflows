@@ -1,0 +1,39 @@
+name: 'Hytale Plugin Build & Release'
+description: 'Builds a Hytale plugin using Maven and creates a GitHub Release'
+author: 'Nitrado'
+
+inputs:
+  plugin-path:
+    description: 'Path to the plugin project root (where pom.xml is located)'
+    required: false
+    default: '.'
+  java-version:
+    description: 'Java version to use for the build'
+    required: false
+    default: '25'
+  manifest-path:
+    description: 'Path to manifest.json file'
+    required: false
+    default: 'src/main/resources/manifest.json'
+  artifact-retention-days:
+    description: 'Number of days to retain build artifacts'
+    required: false
+    default: '7'
+  github-token:
+    description: 'GitHub token for creating releases'
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  version:
+    description: 'The resolved project version'
+  artifact-id:
+    description: 'The Maven artifact ID'
+  hytale-server-version:
+    description: 'The Hytale Server version used'
+  changelog:
+    description: 'The generated changelog for the release'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
