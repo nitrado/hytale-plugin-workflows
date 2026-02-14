@@ -1,7 +1,7 @@
 # This file should be placed in: nitrado/hytale-plugin-workflows/.github/workflows/plugin-ci.yml
 # Then delete this file from this repository.
 
-name: Plugin CI (Reusable)
+name: Gradle Plugin CI (Reusable)
 
 on:
   workflow_call:
@@ -155,7 +155,12 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ inputs.java-version }}
+          server-id: github # Value of the distributionManagement/repository/id field of the pom.xml
           cache: maven
+          settings-path: ${{ github.workspace }} # location for the settings.xml file
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@af1da67850ed9a4cedd57bfd976089dd991e2582 # v4.0.0
 
       - name: Determine artifact ID
         id: artifact
@@ -171,7 +176,7 @@ jobs:
           MAVEN_PASSWORD: ${{ secrets.MAVEN_PASSWORD }}
         if: ${{ env.MAVEN_REPO_URL && env.MAVEN_USERNAME && env.MAVEN_PASSWORD }}
         run: |
-          mkdir -p $HOME/.m2
+          mkdir -p ${{github.workspace}}/.m2
           echo "<settings>
                   <servers>
                     <server>
@@ -216,14 +221,17 @@ jobs:
         with:
           name: build-artifacts
           path: |
-            build/out/${{ steps.artifact.outputs.artifact_id }}-*.jar
-            !build/out/original-*.jar
+            build/libs/${{ steps.artifact.outputs.artifact_id }}-*.jar
+            !build/libs/original-*.jar
           retention-days: ${{ inputs.artifact-retention-days }}
 
   generate-changelog:
     needs: [build]
     if: ${{ needs.build.outputs.is_release == 'true' && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     outputs:
       changelog: ${{ steps.changelog.outputs.changelog }}
     steps:

@@ -1,7 +1,7 @@
 # This file should be placed in: nitrado/hytale-plugin-workflows/.github/workflows/plugin-ci.yml
 # Then delete this file from this repository.
 
-name: Plugin CI (Reusable)
+name: Maven Plugin CI (Reusable)
 
 on:
   workflow_call:

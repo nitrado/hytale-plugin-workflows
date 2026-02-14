@@ -52,16 +52,6 @@ jobs:
       MODTALE_PROJECT_ID: ${{ secrets.MODTALE_PROJECT_ID }}
 ```
 
-### Gradle version
-
-The gradle version requires in the `build.gradle` file the following task:
-
-```groovy
-jar {
-   destinationDirectory.set(file("$buildDir/out"))
-}
-```
-
 ## Inputs
 
 | Input                     | Type    | Default                              | Description                                          |
