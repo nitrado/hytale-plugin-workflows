@@ -160,7 +160,7 @@ jobs:
       - name: Determine artifact ID
         id: artifact
         run: |
-          ARTIFACT_ID=$(mvn help:evaluate -Dexpression=project.artifactId -q -DforceStdout)
+          ARTIFACT_ID=$(./gradlew -q properties | grep "^name:" | sed 's/^name: //')
           echo "artifact_id=$ARTIFACT_ID" >> $GITHUB_OUTPUT
           echo "Detected artifact ID: $ARTIFACT_ID"
 
@@ -206,11 +206,9 @@ jobs:
 
       - name: Build (clean package)
         run: >
-          mvn -B -V
-          clean
-          package
-          -Drevision=${{ steps.version.outputs.version }}
-          -Dhytale.server.version=${{ steps.hytale-version.outputs.hytale_server_version }}
+          ./gradlew clean build
+            -Prevision=${{ steps.version.outputs.version }}
+            -PhytaleServerVersion=${{ steps.hytale-version.outputs.hytale_server_version }}
 
       - name: Upload Build Artifacts
         if: ${{ success() }}
@@ -218,8 +216,8 @@ jobs:
         with:
           name: build-artifacts
           path: |
-            target/${{ steps.artifact.outputs.artifact_id }}-*.jar
-            !target/original-*.jar
+            build/out/${{ steps.artifact.outputs.artifact_id }}-*.jar
+            !build/out/original-*.jar
           retention-days: ${{ inputs.artifact-retention-days }}
 
   generate-changelog:
@@ -402,4 +400,3 @@ jobs:
     secrets:
       CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
       CURSEFORGE_PROJECT_ID: ${{ secrets.CURSEFORGE_PROJECT_ID }}
-
