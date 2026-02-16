@@ -216,6 +216,15 @@ jobs:
             -Prevision=${{ steps.version.outputs.version }}
             -PhytaleServerVersion=${{ steps.hytale-version.outputs.hytale_server_version }}
 
+      - name: Upload Gradle reports
+        uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: gradle-reports
+          path: |
+            build/reports/tests/test/index.html
+            build/reports/problems/problems-report.html
+
       - name: Upload Build Artifacts
         if: ${{ success() }}
         uses: actions/upload-artifact@v6
