@@ -356,12 +356,16 @@ jobs:
 | `CURSEFORGE_TOKEN`      | Yes      | CurseForge API token            |
 | `CURSEFORGE_PROJECT_ID` | Yes      | CurseForge project ID (numeric) |
 
----## Requirements
+---
 
-- Your project must use Maven
+## Requirements
+
+
+- For manifest updates, ensure `manifest.json` has a `"Version": "..."` field
+
+### Requirements for Maven
 - The `pom.xml` should support the `-Drevision` property for version injection
 - The `pom.xml` should support the `-Dhytale.server.version` property for the Hytale Server dependency version (see example below)
-- For manifest updates, ensure `manifest.json` has a `"Version": "..."` field
 
 ### Example `pom.xml` Configuration
 
@@ -384,3 +388,20 @@ Your `pom.xml` should define properties with defaults that can be overridden via
 ```
 
 The workflow will automatically pass the latest Hytale Server version via `-Dhytale.server.version=<version>` during the build.
+
+### Example build.gradle
+
+```groovy
+repositories {
+   // ...
+   maven {
+      url = uri("https://maven.hytale.com/release")
+   }
+}
+
+dependencies {
+   compileOnly("com.hypixel.hytale:Server:${project.findProperty("hytaleServerVersion")}")
+   testImplementation("com.hypixel.hytale:Server:${project.findProperty("hytaleServerVersion")}")
+   // ...
+}
+```
