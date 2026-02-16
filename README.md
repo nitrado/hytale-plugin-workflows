@@ -4,19 +4,22 @@ Reusable GitHub Actions workflows for building, testing, and publishing Hytale p
 
 ## Available Workflows
 
-| Workflow                                                              | Description                                                     |
-|-----------------------------------------------------------------------|-----------------------------------------------------------------|
-| [`plugin-ci.yml`](#plugin-ci-plugin-ciyml)                            | Complete CI/CD workflow for building, releasing, and publishing |
-| [`maven-publish.yml`](#maven-publish-maven-publishyml)                | Standalone Maven repository publishing                          |
-| [`gcs-publish.yml`](#gcs-publish-gcs-publishyml)                      | Standalone Google Cloud Storage publishing                      |
-| [`modtale-publish.yml`](#modtale-publish-modtale-publishyml)          | Standalone Modtale publishing                                   |
-| [`curseforge-publish.yml`](#curseforge-publish-curseforge-publishyml) | Standalone CurseForge publishing                                |
+| Workflow                                                              | Description                                                                 |
+|-----------------------------------------------------------------------|-----------------------------------------------------------------------------|
+| [`maven-plugin-ci.yml`](#plugin-ci-plugin-ciyml)                      | Complete CI/CD workflow for building, releasing, and publishing with maven  |
+| [`gradle-plugin-ci.yml`](#plugin-ci-plugin-ciyml)                     | Complete CI/CD workflow for building, releasing, and publishing with gradle |
+| [`maven-publish.yml`](#maven-publish-maven-publishyml)                | Standalone Maven repository publishing                                      |
+| [`gcs-publish.yml`](#gcs-publish-gcs-publishyml)                      | Standalone Google Cloud Storage publishing                                  |
+| [`modtale-publish.yml`](#modtale-publish-modtale-publishyml)          | Standalone Modtale publishing                                               |
+| [`curseforge-publish.yml`](#curseforge-publish-curseforge-publishyml) | Standalone CurseForge publishing                                            |
 
 ---
 
-## Plugin CI (`plugin-ci.yml`)
+## Plugin CI (`*-plugin-ci.yml`)
 
 A complete CI/CD workflow for Java-based Hytale plugins that handles building, versioning, GitHub releases, Maven publishing, and GCS artifact uploads.
+- Use maven-plugin-ci.yml for maven projects.
+- Use gradle-plugin-ci.yml for gradle projects.
 
 ### Usage
 
@@ -35,7 +38,7 @@ on:
 
 jobs:
   build:
-    uses: nitrado/hytale-plugin-workflows/.github/workflows/plugin-ci.yml@main
+    uses: nitrado/hytale-plugin-workflows/.github/workflows/maven-plugin-ci.yml@main
     secrets:
       MAVEN_REPO_URL: ${{ secrets.MAVEN_REPO_URL }}
       MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
@@ -63,7 +66,7 @@ jobs:
 ```yaml
 jobs:
   build:
-    uses: nitrado/hytale-plugin-workflows/.github/workflows/plugin-ci.yml@main
+    uses: nitrado/hytale-plugin-workflows/.github/workflows/maven-plugin-ci.yml@main
     with:
       java-version: "25"
       artifact-retention-days: 14
@@ -353,12 +356,16 @@ jobs:
 | `CURSEFORGE_TOKEN`      | Yes      | CurseForge API token            |
 | `CURSEFORGE_PROJECT_ID` | Yes      | CurseForge project ID (numeric) |
 
----## Requirements
+---
 
-- Your project must use Maven
+## Requirements
+
+
+- For manifest updates, ensure `manifest.json` has a `"Version": "..."` field
+
+### Requirements for Maven
 - The `pom.xml` should support the `-Drevision` property for version injection
 - The `pom.xml` should support the `-Dhytale.server.version` property for the Hytale Server dependency version (see example below)
-- For manifest updates, ensure `manifest.json` has a `"Version": "..."` field
 
 ### Example `pom.xml` Configuration
 
@@ -382,3 +389,19 @@ Your `pom.xml` should define properties with defaults that can be overridden via
 
 The workflow will automatically pass the latest Hytale Server version via `-Dhytale.server.version=<version>` during the build.
 
+### Example build.gradle
+
+```groovy
+repositories {
+   // ...
+   maven {
+      url = uri("https://maven.hytale.com/release")
+   }
+}
+
+dependencies {
+   compileOnly("com.hypixel.hytale:Server:${project.findProperty("hytaleServerVersion")}")
+   testImplementation("com.hypixel.hytale:Server:${project.findProperty("hytaleServerVersion")}")
+   // ...
+}
+```
