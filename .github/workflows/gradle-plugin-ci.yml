@@ -211,10 +211,7 @@ jobs:
           cat ${{ inputs.manifest-path }}
 
       - name: Build (clean package)
-        run: |
-          ./gradlew clean build
-            -Prevision=${{ steps.version.outputs.version }}
-            -PhytaleServerVersion=${{ steps.hytale-version.outputs.hytale_server_version }}
+        run: ./gradlew clean build -Prevision=${{ steps.version.outputs.version }} -PhytaleServerVersion=${{ steps.hytale-version.outputs.hytale_server_version }}
 
       - name: Upload Gradle reports
         uses: actions/upload-artifact@v6
