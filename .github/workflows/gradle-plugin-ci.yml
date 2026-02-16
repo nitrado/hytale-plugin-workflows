@@ -238,8 +238,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       changelog: ${{ steps.changelog.outputs.changelog }}
-    permissions:
-      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v6
