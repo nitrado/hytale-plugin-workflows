@@ -354,7 +354,7 @@ jobs:
           body: ${{ needs.generate-changelog.outputs.changelog }}
           files: |
             ${{ needs.build.outputs.artifact_id }}-${{ needs.build.outputs.version }}.zip
-            dist/${{ needs.build.outputs.artifact_id }}-${{ needs.build.outputs.version }}.jar
+            dist/${{ needs.build.outputs.artifact_id }}-${{ needs.build.outputs.version }}+${{ needs.build.outputs.hytale_server_version }}.jar
 
   publish-gcs:
     needs: [build, publish]
