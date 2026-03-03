@@ -221,7 +221,7 @@ jobs:
       - name: Update manifest version for release
         if: ${{ steps.version.outputs.is_release == 'true' }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}+${{ steps.hytale-version.outputs.hytale_server_version }}"
+          VERSION="${{ steps.version.outputs.version }}"
           SERVER_VERSION="${{ steps.hytale-version.outputs.hytale_server_version }}"
           sed -i "s/\"Version\": \"[^\"]*\"/\"Version\": \"$VERSION\"/" ${{ inputs.manifest-path }}
           sed -i "s/\"ServerVersion\": \"[^\"]*\"/\"ServerVersion\": \"$SERVER_VERSION\"/" ${{ inputs.manifest-path }}
