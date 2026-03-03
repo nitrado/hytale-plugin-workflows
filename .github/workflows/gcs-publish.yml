@@ -3,8 +3,12 @@ name: GCS Publish (Reusable)
 on:
   workflow_call:
     inputs:
+      artifact-id:
+        description: "The Maven artifact ID, e.g. nitrado-query"
+        type: string
+        required: true
       version:
-        description: "This is the full name of the JAR file, without extension, e.g. nitrado-query-1.1.1-rc1+2026.02.19-1a311a592"
+        description: "The semver version string, e.g. 1.1.1-rc1+2026.02.19-1a311a592"
         type: string
         required: true
       tag-name:
@@ -21,8 +25,12 @@ on:
 
   workflow_dispatch:
     inputs:
+      artifact-id:
+        description: "The Maven artifact ID, e.g. nitrado-query"
+        type: string
+        required: true
       version:
-        description: "This is the full name of the JAR file, without extension, e.g. nitrado-query-1.1.1-rc1+2026.02.19-1a311a592"
+        description: "The semver version string, e.g. 1.1.1-rc1+2026.02.19-1a311a592"
         type: string
         required: true
       tag-name:
@@ -66,8 +74,8 @@ jobs:
         run: |
           TAG_NAME="${{ steps.resolve.outputs.tag_name }}"
           
-          JAR_NAME="${{ inputs.version }}.jar"
-          ZIP_NAME="${{ inputs.version }}.zip"
+          JAR_NAME="${{ inputs.artifact-id }}-${{ inputs.version }}.jar"
+          ZIP_NAME="${{ inputs.artifact-id }}-${{ inputs.version }}.zip"
           
           echo "Downloading jar from release: $JAR_NAME"
           gh release download "$TAG_NAME" --repo "${{ github.repository }}" --pattern "$JAR_NAME" || {
@@ -95,6 +103,6 @@ jobs:
         if: ${{ env.HAVE_GCP == 'true' && env.HAVE_GCS_BUCKET == 'true' }}
         uses: google-github-actions/upload-cloud-storage@v3
         with:
-          path: ${{ inputs.version }}.zip
+          path: ${{ inputs.artifact-id }}-${{ inputs.version }}.zip
           destination: ${{ secrets.GCS_BUCKET }}
 
