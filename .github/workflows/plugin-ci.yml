@@ -22,6 +22,10 @@ on:
         description: "Path to manifest.json file"
         type: string
         default: "src/main/resources/manifest.json"
+      checkout-ref:
+        description: "Git ref to checkout (tag, branch, SHA). Defaults to the triggering ref."
+        type: string
+        default: ""
     secrets:
       MAVEN_REPO_URL:
         description: "Maven repository URL for dependencies"
@@ -90,6 +94,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
+          ref: ${{ inputs.checkout-ref || '' }}
           fetch-depth: 0
 
       - name: Determine version
@@ -97,9 +102,18 @@ jobs:
         run: |
           # Semver regex with required leading v
           SEMVER_REGEX='^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'
+
+          # Use checkout-ref if provided, otherwise fall back to GITHUB_REF
+          CHECKOUT_REF="${{ inputs.checkout-ref }}"
+          if [[ -n "$CHECKOUT_REF" ]]; then
+            EFFECTIVE_REF="refs/tags/$CHECKOUT_REF"
+            echo "Using checkout-ref as effective ref: $EFFECTIVE_REF"
+          else
+            EFFECTIVE_REF="$GITHUB_REF"
+          fi
           
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            TAG_NAME="${GITHUB_REF#refs/tags/}"
+          if [[ "$EFFECTIVE_REF" == refs/tags/* ]]; then
+            TAG_NAME="${EFFECTIVE_REF#refs/tags/}"
             if [[ "$TAG_NAME" =~ $SEMVER_REGEX ]]; then
               # Strip leading 'v' for maven/jar version
               VERSION="${TAG_NAME#v}"
@@ -240,6 +254,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
+          ref: ${{ inputs.checkout-ref || '' }}
           fetch-depth: 0
 
       - name: Download Build Artifacts

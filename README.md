@@ -11,13 +11,14 @@ Reusable GitHub Actions workflows for building, testing, and publishing Hytale p
 
 ## Available Workflows
 
-| Workflow                                                              | Description                                                     |
-|-----------------------------------------------------------------------|-----------------------------------------------------------------|
-| [`plugin-ci.yml`](#plugin-ci-plugin-ciyml)                            | Complete CI/CD workflow for building, releasing, and publishing |
-| [`maven-publish.yml`](#maven-publish-maven-publishyml)                | Standalone Maven repository publishing                          |
-| [`gcs-publish.yml`](#gcs-publish-gcs-publishyml)                      | Standalone Google Cloud Storage publishing                      |
-| [`modtale-publish.yml`](#modtale-publish-modtale-publishyml)          | Standalone Modtale publishing                                   |
-| [`curseforge-publish.yml`](#curseforge-publish-curseforge-publishyml) | Standalone CurseForge publishing                                |
+| Workflow                                                                                               | Description                                                           |
+|--------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------|
+| [`plugin-ci.yml`](#plugin-ci-plugin-ciyml)                                                             | Complete CI/CD workflow for building, releasing, and publishing       |
+| [`rebuild-on-new-server-version.yml`](#rebuild-on-new-server-version-rebuild-on-new-server-versionyml) | Schedulable check to rebuild when a new Hytale Server version appears |
+| [`maven-publish.yml`](#maven-publish-maven-publishyml)                                                 | Standalone Maven repository publishing                                |
+| [`gcs-publish.yml`](#gcs-publish-gcs-publishyml)                                                       | Standalone Google Cloud Storage publishing                            |
+| [`modtale-publish.yml`](#modtale-publish-modtale-publishyml)                                           | Standalone Modtale publishing                                         |
+| [`curseforge-publish.yml`](#curseforge-publish-curseforge-publishyml)                                  | Standalone CurseForge publishing                                      |
 
 ---
 
@@ -60,12 +61,13 @@ jobs:
 
 ## Inputs
 
-| Input                     | Type   | Default                              | Description                              |
-|---------------------------|--------|--------------------------------------|------------------------------------------|
-| `java-version`            | string | `"25"`                               | Java version for building                |
-| `java-version-publish`    | string | `"25"`                               | Java version for Maven publishing        |
-| `artifact-retention-days` | number | `7`                                  | Number of days to retain build artifacts |
-| `manifest-path`           | string | `"src/main/resources/manifest.json"` | Path to manifest.json file               |
+| Input                     | Type   | Default                              | Description                                                     |
+|---------------------------|--------|--------------------------------------|-----------------------------------------------------------------|
+| `java-version`            | string | `"25"`                               | Java version for building                                       |
+| `java-version-publish`    | string | `"25"`                               | Java version for Maven publishing                               |
+| `artifact-retention-days` | number | `7`                                  | Number of days to retain build artifacts                        |
+| `manifest-path`           | string | `"src/main/resources/manifest.json"` | Path to manifest.json file                                      |
+| `checkout-ref`            | string | `""`                                 | Git ref to checkout (tag, branch, SHA). Defaults to the triggering ref |
 
 ### Example with Custom Inputs
 
@@ -184,6 +186,61 @@ After a release tag is pushed (or re-run on an existing tag):
 5. Once approved, all external publish jobs (GCS, Maven, Modtale, CurseForge) proceed in parallel
 
 > **Note:** Without the `publish-external` environment configured with required reviewers, the external publish jobs will run immediately after the GitHub Release is created.
+
+---
+
+## Rebuild on new Server Version (`rebuild-on-new-server-version.yml`)
+
+A reusable workflow intended to run on a schedule. It checks whether the latest Hytale Server version is already covered by the most recent stable GitHub release, and if not, triggers a full `plugin-ci` build against that release tag.
+
+### How It Works
+
+1. Fetches the current Hytale Server version from [maven.hytale.com](https://maven.hytale.com/release/com/hypixel/hytale/Server/maven-metadata.xml)
+2. Determines the latest stable (non-prerelease) GitHub release
+3. Inspects the release's JAR assets to extract which server versions are already supported (based on the `+<server-version>` suffix in filenames like `my-plugin-1.0.0+2026.02.19-1a311a592.jar`)
+4. If the current server version is **not** among the supported versions, calls `plugin-ci.yml` with `checkout-ref` set to the release tag - producing a new JAR, updating the release, and publishing to all configured platforms
+
+### Usage
+
+Create a scheduled workflow in your plugin repository (e.g., `.github/workflows/server-version-check.yml`):
+
+```yaml
+name: Check for new Hytale Server version
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'  # every 6 hours
+  workflow_dispatch:         # allow manual triggers
+
+jobs:
+  check:
+    uses: nitrado/hytale-plugin-workflows/.github/workflows/rebuild-on-new-server-version.yml@main
+    with:
+      artifact-id: my-plugin
+    secrets:
+      MAVEN_REPO_URL: ${{ secrets.MAVEN_REPO_URL }}
+      MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
+      MAVEN_PASSWORD: ${{ secrets.MAVEN_PASSWORD }}
+      MAVEN_PUBLISH_URL: ${{ secrets.MAVEN_PUBLISH_URL }}
+      MAVEN_PUBLISH_USERNAME: ${{ secrets.MAVEN_PUBLISH_USERNAME }}
+      MAVEN_PUBLISH_PASSWORD: ${{ secrets.MAVEN_PUBLISH_PASSWORD }}
+      GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
+      GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      MODTALE_API_KEY: ${{ secrets.MODTALE_API_KEY }}
+      MODTALE_PROJECT_ID: ${{ secrets.MODTALE_PROJECT_ID }}
+      CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+      CURSEFORGE_PROJECT_ID: ${{ secrets.CURSEFORGE_PROJECT_ID }}
+```
+
+### Inputs
+
+| Input         | Type   | Required | Description                                       |
+|---------------|--------|----------|---------------------------------------------------|
+| `artifact-id` | string | Yes      | The Maven artifact ID, e.g. `nitrado-query`       |
+
+### Secrets
+
+All secrets are forwarded to `plugin-ci.yml`. See the [Plugin CI Secrets](#secrets) table for details.
 
 ## Modtale Publishing
 
