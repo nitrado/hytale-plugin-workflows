@@ -15,6 +15,10 @@ on:
         description: "The GitHub release tag name"
         type: string
         required: true
+      hytale-server-version:
+        description: "The Hytale Server version to use for dependency resolution"
+        type: string
+        required: true
     secrets:
       MAVEN_REPO_URL:
         description: "Maven repository URL for dependencies"
@@ -47,6 +51,10 @@ on:
         required: true
       tag-name:
         description: "The GitHub release tag name"
+        type: string
+        required: true
+      hytale-server-version:
+        description: "The Hytale Server version to use for dependency resolution"
         type: string
         required: true
 
@@ -155,6 +163,7 @@ jobs:
           clean
           deploy
           -Drevision=${{ inputs.version }}
+          -Dhytale.server.version=${{ inputs.hytale-server-version }}
           -DaltDeploymentRepository=publish-repo::${{ secrets.MAVEN_PUBLISH_URL }}
           -DskipTests
 

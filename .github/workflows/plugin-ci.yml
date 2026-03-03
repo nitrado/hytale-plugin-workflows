@@ -476,6 +476,7 @@ jobs:
       java-version: ${{ inputs.java-version-publish }}
       version: ${{ needs.build.outputs.version }}
       tag-name: ${{ needs.build.outputs.tag_name }}
+      hytale-server-version: ${{ needs.build.outputs.hytale_server_version }}
     secrets:
       MAVEN_REPO_URL: ${{ secrets.MAVEN_REPO_URL }}
       MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
