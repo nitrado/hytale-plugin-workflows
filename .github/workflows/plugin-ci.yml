@@ -354,6 +354,7 @@ jobs:
       - name: Create or update release
         env:
           GH_TOKEN: ${{ github.token }}
+          CHANGELOG_BODY: ${{ steps.changelog.outputs.changelog }}
         run: |
           TAG_NAME="${{ needs.build.outputs.tag_name }}"
           VERSION="${{ needs.build.outputs.version }}"
@@ -433,7 +434,7 @@ jobs:
             cd ..
 
             SERVER_VERSION="${{ needs.build.outputs.hytale_server_version }}"
-            CHANGELOG='${{ steps.changelog.outputs.changelog }}'
+            CHANGELOG="$CHANGELOG_BODY"
 
             BODY="${CHANGELOG}
 
