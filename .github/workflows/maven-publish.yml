@@ -8,7 +8,7 @@ on:
         type: string
         default: "25"
       version:
-        description: "The version to publish"
+        description: "The Maven version to publish, e.g. 1.1.1-rc1"
         type: string
         required: true
       tag-name:
@@ -41,6 +41,14 @@ on:
         description: "Java version for Maven publishing"
         type: string
         default: "25"
+      version:
+        description: "The Maven version to publish, e.g. 1.1.1-rc1"
+        type: string
+        required: true
+      tag-name:
+        description: "The GitHub release tag name"
+        type: string
+        required: true
 
 jobs:
   publish-maven:
@@ -51,7 +59,7 @@ jobs:
       HAVE_MAVEN_PUBLISH: ${{ secrets.MAVEN_PUBLISH_URL != '' && secrets.MAVEN_PUBLISH_USERNAME != '' && secrets.MAVEN_PUBLISH_PASSWORD != '' }}
       HAVE_MAVEN_REPO: ${{ secrets.MAVEN_REPO_URL != '' && secrets.MAVEN_USERNAME != '' && secrets.MAVEN_PASSWORD != '' }}
     steps:
-      - name: Resolve version from tag
+      - name: Resolve tag
         id: resolve
         run: |
           # For workflow_call, use inputs.tag-name; for workflow_dispatch, use GITHUB_REF
@@ -64,10 +72,6 @@ jobs:
             exit 1
           fi
           echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
-          # Strip leading 'v' for version
-          VERSION="${TAG_NAME#v}"
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Resolved version: $VERSION from tag: $TAG_NAME"
 
       - name: Check Maven publish configuration
         if: ${{ env.HAVE_MAVEN_PUBLISH != 'true' }}
@@ -150,7 +154,7 @@ jobs:
           mvn -B -V
           clean
           deploy
-          -Drevision=${{ steps.resolve.outputs.version }}
+          -Drevision=${{ inputs.version }}
           -DaltDeploymentRepository=publish-repo::${{ secrets.MAVEN_PUBLISH_URL }}
           -DskipTests
 

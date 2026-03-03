@@ -84,6 +84,7 @@ jobs:
       is_prerelease: ${{ steps.version.outputs.is_prerelease }}
       artifact_id: ${{ steps.artifact.outputs.artifact_id }}
       hytale_server_version: ${{ steps.hytale-version.outputs.hytale_server_version }}
+      jar_name: ${{ steps.jar-name.outputs.jar_name }}
 
     steps:
       - name: Checkout
@@ -164,6 +165,13 @@ jobs:
           echo "artifact_id=$ARTIFACT_ID" >> $GITHUB_OUTPUT
           echo "Detected artifact ID: $ARTIFACT_ID"
 
+      - name: Compute JAR name
+        id: jar-name
+        run: |
+          JAR_NAME="${{ steps.artifact.outputs.artifact_id }}-${{ steps.version.outputs.version }}+${{ steps.hytale-version.outputs.hytale_server_version }}"
+          echo "jar_name=$JAR_NAME" >> $GITHUB_OUTPUT
+          echo "JAR name: $JAR_NAME"
+
       - name: Set up Maven settings.xml with additional repository
         env:
           MAVEN_REPO_URL: ${{ secrets.MAVEN_REPO_URL }}
@@ -224,20 +232,38 @@ jobs:
             !target/original-*.jar
           retention-days: ${{ inputs.artifact-retention-days }}
 
-  generate-changelog:
+  release:
     needs: [build]
     if: ${{ needs.build.outputs.is_release == 'true' && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
-    outputs:
-      changelog: ${{ steps.changelog.outputs.changelog }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - name: Generate changelog
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v7
+        with:
+          name: build-artifacts
+
+      - name: Check for existing release
+        id: check-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG_NAME="${{ needs.build.outputs.tag_name }}"
+          if gh release view "$TAG_NAME" --repo "${{ github.repository }}" > /dev/null 2>&1; then
+            echo "release_exists=true" >> $GITHUB_OUTPUT
+            echo "Existing release found for tag $TAG_NAME"
+          else
+            echo "release_exists=false" >> $GITHUB_OUTPUT
+            echo "No existing release for tag $TAG_NAME"
+          fi
+
+      - name: Generate changelog (new release only)
         id: changelog
+        if: ${{ steps.check-release.outputs.release_exists == 'false' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -281,7 +307,7 @@ jobs:
           
           PREV_VERSION="${PREV_TAG#v}"
           CURRENT_VERSION="${TAG_NAME#v}"
-          
+
           # Extract base version (without prerelease suffix) for prerelease notice
           BASE_VERSION="${CURRENT_VERSION%%-*}"
           
@@ -325,52 +351,124 @@ jobs:
           echo "Generated changelog:"
           echo "$FULL_CHANGELOG"
 
-  publish:
-    needs: [build, generate-changelog]
-    if: ${{ needs.build.outputs.is_release == 'true' && needs.build.result == 'success' }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download Build Artifacts
-        uses: actions/download-artifact@v7
-        with:
-          name: build-artifacts
-
-      - name: Generate release archive
-        if: ${{ success() }}
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          ls -la
-          mkdir dist
-          mv ${{ needs.build.outputs.artifact_id }}-*.jar dist/
-          cd dist
-          zip -r ../${{ needs.build.outputs.artifact_id }}-${{ needs.build.outputs.version }}.zip .
+          TAG_NAME="${{ needs.build.outputs.tag_name }}"
+          VERSION="${{ needs.build.outputs.version }}"
+          ARTIFACT_ID="${{ needs.build.outputs.artifact_id }}"
+          JAR_NAME="${{ needs.build.outputs.jar_name }}"
+          RELEASE_EXISTS="${{ steps.check-release.outputs.release_exists }}"
+          IS_PRERELEASE="${{ needs.build.outputs.is_prerelease }}"
 
-      - name: Create GitHub Release
-        if: ${{ success() }}
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.build.outputs.tag_name }}
-          name: Release ${{ needs.build.outputs.version }}
-          prerelease: ${{ needs.build.outputs.is_prerelease == 'true' }}
-          body: ${{ needs.generate-changelog.outputs.changelog }}
-          files: |
-            ${{ needs.build.outputs.artifact_id }}-${{ needs.build.outputs.version }}.zip
-            dist/${{ needs.build.outputs.artifact_id }}-${{ needs.build.outputs.version }}+${{ needs.build.outputs.hytale_server_version }}.jar
+          NEW_JAR="${JAR_NAME}.jar"
+          if [[ ! -f "$NEW_JAR" ]]; then
+            echo "ERROR: Built JAR not found: $NEW_JAR"
+            ls -la
+            exit 1
+          fi
+
+          if [[ "$RELEASE_EXISTS" == "true" ]]; then
+            # --- Existing release: append JAR and rebuild zip ---
+            echo "Updating existing release $TAG_NAME"
+
+            # Download all existing JARs from the release
+            mkdir -p dist
+            gh release download "$TAG_NAME" --repo "${{ github.repository }}" --pattern "${ARTIFACT_ID}-*.jar" --dir dist || true
+            
+            # Add the new JAR (overwrites if same server version was already published)
+            cp "$NEW_JAR" dist/
+
+            # Collect server versions from all JAR filenames for the release body
+            SERVER_VERSIONS=""
+            for jar in dist/*.jar; do
+              fname=$(basename "$jar")
+              # Extract server version: everything after the "+" in the filename, minus .jar
+              sv="${fname#*+}"
+              sv="${sv%.jar}"
+              if [[ -n "$sv" ]]; then
+                SERVER_VERSIONS="${SERVER_VERSIONS}- \`${sv}\`\n"
+              fi
+            done
+
+            # Rebuild the zip with all JARs
+            ZIP_NAME="${ARTIFACT_ID}-${VERSION}.zip"
+            rm -f "$ZIP_NAME"
+            cd dist
+            zip -r "../${ZIP_NAME}" .
+            cd ..
+
+            # Get current release body (the changelog portion)
+            CURRENT_BODY=$(gh release view "$TAG_NAME" --repo "${{ github.repository }}" --json body --jq '.body')
+
+            # Strip any previous "Server Versions" section (everything from the marker to the next blank-line-then-# or end)
+            CLEANED_BODY=$(echo "$CURRENT_BODY" | sed '/^## Server Versions$/,/^$/d')
+
+            # Append updated server versions section
+            UPDATED_BODY="${CLEANED_BODY}
+
+          ## Server Versions
+          $(echo -e "$SERVER_VERSIONS")"
+
+            # Delete the old zip so we can re-upload
+            gh release delete-asset "$TAG_NAME" "$ZIP_NAME" --repo "${{ github.repository }}" --yes 2>/dev/null || true
+
+            # Upload new JAR and rebuilt zip, then update the body
+            gh release upload "$TAG_NAME" "$NEW_JAR" "${ZIP_NAME}" --repo "${{ github.repository }}" --clobber
+            gh release edit "$TAG_NAME" --repo "${{ github.repository }}" \
+              --notes "$UPDATED_BODY"
+
+            echo "Release updated with new JAR and rebuilt zip"
+          else
+            # --- New release: create from scratch ---
+            echo "Creating new release $TAG_NAME"
+
+            mkdir -p dist
+            cp "$NEW_JAR" dist/
+
+            ZIP_NAME="${ARTIFACT_ID}-${VERSION}.zip"
+            cd dist
+            zip -r "../${ZIP_NAME}" .
+            cd ..
+
+            SERVER_VERSION="${{ needs.build.outputs.hytale_server_version }}"
+            CHANGELOG='${{ steps.changelog.outputs.changelog }}'
+
+            BODY="${CHANGELOG}
+
+          ## Server Versions
+          - \`${SERVER_VERSION}\`"
+
+            PRERELEASE_FLAG=""
+            if [[ "$IS_PRERELEASE" == "true" ]]; then
+              PRERELEASE_FLAG="--prerelease"
+            fi
+
+            gh release create "$TAG_NAME" \
+              --repo "${{ github.repository }}" \
+              --title "Release ${VERSION}" \
+              --notes "$BODY" \
+              $PRERELEASE_FLAG \
+              "$NEW_JAR" "${ZIP_NAME}"
+
+            echo "Release created"
+          fi
 
   publish-gcs:
-    needs: [build, publish]
-    if: ${{ needs.build.outputs.is_release == 'true' && needs.publish.result == 'success' }}
+    needs: [build, release]
+    if: ${{ needs.build.outputs.is_release == 'true' && needs.release.result == 'success' }}
     uses: ./.github/workflows/gcs-publish.yml
     with:
-      artifact-id: ${{ needs.build.outputs.artifact_id }}
-      version: ${{ needs.build.outputs.version }}
+      version: ${{ needs.build.outputs.jar_name }}
       tag-name: ${{ needs.build.outputs.tag_name }}
     secrets:
       GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
       GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
 
   publish-maven:
-    needs: [build, publish]
-    if: ${{ needs.build.outputs.is_release == 'true' && needs.publish.result == 'success' }}
+    needs: [build, release]
+    if: ${{ needs.build.outputs.is_release == 'true' && needs.release.result == 'success' }}
     uses: ./.github/workflows/maven-publish.yml
     with:
       java-version: ${{ inputs.java-version-publish }}
@@ -385,22 +483,24 @@ jobs:
       MAVEN_PUBLISH_PASSWORD: ${{ secrets.MAVEN_PUBLISH_PASSWORD }}
 
   publish-modtale:
-    needs: [build, publish, generate-changelog]
-    if: ${{ needs.build.outputs.is_release == 'true' && needs.publish.result == 'success' }}
+    needs: [build, release]
+    if: ${{ needs.build.outputs.is_release == 'true' && needs.release.result == 'success' }}
     uses: ./.github/workflows/modtale-publish.yml
     with:
-      artifact-id: ${{ needs.build.outputs.artifact_id }}
+      version: ${{ needs.build.outputs.jar_name }}
+      tag-name: ${{ needs.build.outputs.tag_name }}
       game-versions: ${{ needs.build.outputs.hytale_server_version }}
     secrets:
       MODTALE_API_KEY: ${{ secrets.MODTALE_API_KEY }}
       MODTALE_PROJECT_ID: ${{ secrets.MODTALE_PROJECT_ID }}
 
   publish-curseforge:
-    needs: [build, publish, generate-changelog]
-    if: ${{ needs.build.outputs.is_release == 'true' && needs.publish.result == 'success' }}
+    needs: [build, release]
+    if: ${{ needs.build.outputs.is_release == 'true' && needs.release.result == 'success' }}
     uses: ./.github/workflows/curseforge-publish.yml
     with:
-      artifact-id: ${{ needs.build.outputs.artifact_id }}
+      version: ${{ needs.build.outputs.jar_name }}
+      tag-name: ${{ needs.build.outputs.tag_name }}
     secrets:
       CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
       CURSEFORGE_PROJECT_ID: ${{ secrets.CURSEFORGE_PROJECT_ID }}

@@ -3,8 +3,12 @@ name: CurseForge Publish (Reusable)
 on:
   workflow_call:
     inputs:
-      artifact-id:
-        description: "The artifact ID (jar name prefix)"
+      version:
+        description: "This is the full name of the JAR file, without extension, e.g. nitrado-query-1.1.1-rc1+2026.02.19-1a311a592"
+        type: string
+        required: true
+      tag-name:
+        description: "The GitHub release tag name"
         type: string
         required: true
       game-endpoint:
@@ -29,8 +33,12 @@ on:
 
   workflow_dispatch:
     inputs:
-      artifact-id:
-        description: "The artifact ID (jar name prefix)"
+      version:
+        description: "This is the full name of the JAR file, without extension, e.g. nitrado-query-1.1.1-rc1+2026.02.19-1a311a592"
+        type: string
+        required: true
+      tag-name:
+        description: "The GitHub release tag name"
         type: string
         required: true
       game-endpoint:
@@ -52,22 +60,21 @@ jobs:
     runs-on: ubuntu-latest
     environment: publish-external
     steps:
-      - name: Resolve version and artifact info
+      - name: Resolve tag and release type
         id: resolve
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Always use GITHUB_REF to determine tag
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+          # For workflow_call, use inputs.tag-name; for workflow_dispatch, use GITHUB_REF
+          if [[ -n "${{ inputs.tag-name }}" ]]; then
+            TAG_NAME="${{ inputs.tag-name }}"
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
             TAG_NAME="${GITHUB_REF#refs/tags/}"
           else
             echo "ERROR: Must be triggered on a tag (current ref: $GITHUB_REF)"
             exit 1
           fi
           echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
-          
-          # Strip leading 'v' for version
-          VERSION="${TAG_NAME#v}"
           
           # Determine release type from GitHub release prerelease status
           IS_PRERELEASE=$(gh api repos/${{ github.repository }}/releases/tags/$TAG_NAME --jq '.prerelease' 2>/dev/null || echo "false")
@@ -78,36 +85,6 @@ jobs:
             echo "release_type=release" >> $GITHUB_OUTPUT
             echo "GitHub release is stable, using release type: release"
           fi
-          
-          # Strip leading 'v' for version
-          VERSION="${TAG_NAME#v}"
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Resolved version: $VERSION from tag: $TAG_NAME"
-          
-          # If artifact-id is provided as input, use it
-          if [[ -n "${{ inputs.artifact-id }}" ]]; then
-            echo "artifact_id=${{ inputs.artifact-id }}" >> $GITHUB_OUTPUT
-            echo "Using provided artifact ID: ${{ inputs.artifact-id }}"
-            exit 0
-          fi
-          
-          # Otherwise, try to detect from release assets
-          ASSETS=$(gh api repos/${{ github.repository }}/releases/tags/$TAG_NAME --jq '.assets[].name' 2>/dev/null || echo "")
-          
-          # Find a jar file and extract artifact ID
-          JAR_NAME=$(echo "$ASSETS" | grep -E "\.jar$" | grep -v "^original-" | head -n 1)
-          
-          if [[ -z "$JAR_NAME" ]]; then
-            echo "ERROR: Could not find jar in release assets"
-            echo "Available assets:"
-            echo "$ASSETS"
-            exit 1
-          fi
-          
-          # Extract artifact ID by removing version suffix
-          ARTIFACT_ID=$(echo "$JAR_NAME" | sed "s/-${VERSION}\.jar$//")
-          echo "artifact_id=$ARTIFACT_ID" >> $GITHUB_OUTPUT
-          echo "Detected artifact ID: $ARTIFACT_ID"
 
       - name: Fetch changelog from release
         id: changelog
@@ -133,9 +110,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG_NAME="${{ steps.resolve.outputs.tag_name }}"
-          VERSION="${{ steps.resolve.outputs.version }}"
-          ARTIFACT_ID="${{ steps.resolve.outputs.artifact_id }}"
-          JAR_NAME="${ARTIFACT_ID}-${VERSION}.jar"
+          JAR_NAME="${{ inputs.version }}.jar"
           
           echo "Downloading jar from release: $JAR_NAME"
           gh release download "$TAG_NAME" --repo "${{ github.repository }}" --pattern "$JAR_NAME" || {
@@ -158,9 +133,8 @@ jobs:
             exit 0
           fi
           
-          VERSION="${{ steps.resolve.outputs.version }}"
-          ARTIFACT_ID="${{ steps.resolve.outputs.artifact_id }}"
-          JAR_PATH="./${ARTIFACT_ID}-${VERSION}.jar"
+          VERSION="${{ inputs.version }}"
+          JAR_PATH="./${VERSION}.jar"
           
           if [[ ! -f "$JAR_PATH" ]]; then
             echo "ERROR: Could not find jar file at $JAR_PATH"
@@ -200,7 +174,7 @@ jobs:
           {
             "changelog": $(jq -Rs . < "$CHANGELOG_FILE"),
             "changelogType": "markdown",
-            "displayName": "${ARTIFACT_ID}-${VERSION}",
+            "displayName": "${VERSION}",
             "releaseType": "${{ steps.resolve.outputs.release_type }}"$GAME_VERSIONS_BLOCK$RELATIONS_BLOCK
           }
           EOF

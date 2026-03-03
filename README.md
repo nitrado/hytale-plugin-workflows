@@ -1,6 +1,13 @@
-# Hytale Plugin Workflows
+# Hytale Plugin Workflows (v2)
 
 Reusable GitHub Actions workflows for building, testing, and publishing Hytale plugins.
+
+## Changes from v1
+
+- The `artifact-id` input has been removed from all publish workflows (GCS, Modtale, CurseForge). The `version` input now represents the **full JAR file name without extension** (e.g. `nitrado-query-1.1.1-rc1+2026.02.19-1a311a592`), which includes the artifact ID, version, and server version suffix.
+- The `tag-name` input is now required on all publish workflows (including `workflow_dispatch`). It is used solely to identify the GitHub release for asset downloads and prerelease detection.
+- Release type / channel (release vs beta) is now always auto-detected from the GitHub release's prerelease status. The `release-type`, `channel`, and `changelog` inputs have been removed from CurseForge and Modtale publish workflows.
+- Changelog is now always fetched from the GitHub release body rather than passed as an input.
 
 ## Available Workflows
 
@@ -16,7 +23,7 @@ Reusable GitHub Actions workflows for building, testing, and publishing Hytale p
 
 ## Plugin CI (`plugin-ci.yml`)
 
-A complete CI/CD workflow for Java-based Hytale plugins that handles building, versioning, GitHub releases, Maven publishing, and GCS artifact uploads.
+A complete CI/CD workflow for Java-based Hytale plugins that handles building, versioning, GitHub releases, Maven publishing, and GCS artifact uploads. Supports re-running on an existing tag to produce additional builds when the Hytale Server version changes.
 
 ### Usage
 
@@ -47,16 +54,18 @@ jobs:
       GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
       MODTALE_API_KEY: ${{ secrets.MODTALE_API_KEY }}
       MODTALE_PROJECT_ID: ${{ secrets.MODTALE_PROJECT_ID }}
+      CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+      CURSEFORGE_PROJECT_ID: ${{ secrets.CURSEFORGE_PROJECT_ID }}
 ```
 
 ## Inputs
 
-| Input                     | Type    | Default                              | Description                                          |
-|---------------------------|---------|--------------------------------------|------------------------------------------------------|
-| `java-version`            | string  | `"25"`                               | Java version for building                            |
-| `java-version-publish`    | string  | `"25"`                               | Java version for Maven publishing                    |
-| `artifact-retention-days` | number  | `7`                                  | Number of days to retain build artifacts             |
-| `manifest-path`           | string  | `"src/main/resources/manifest.json"` | Path to manifest.json file                           |
+| Input                     | Type   | Default                              | Description                              |
+|---------------------------|--------|--------------------------------------|------------------------------------------|
+| `java-version`            | string | `"25"`                               | Java version for building                |
+| `java-version-publish`    | string | `"25"`                               | Java version for Maven publishing        |
+| `artifact-retention-days` | number | `7`                                  | Number of days to retain build artifacts |
+| `manifest-path`           | string | `"src/main/resources/manifest.json"` | Path to manifest.json file               |
 
 ### Example with Custom Inputs
 
@@ -86,6 +95,8 @@ jobs:
 | `GCS_BUCKET`             | No       | GCS bucket name for artifact storage           |
 | `MODTALE_API_KEY`        | No       | Modtale API key for publishing to Modtale      |
 | `MODTALE_PROJECT_ID`     | No       | Modtale project ID for publishing              |
+| `CURSEFORGE_TOKEN`       | No       | CurseForge API token for publishing            |
+| `CURSEFORGE_PROJECT_ID`  | No       | CurseForge project ID (numeric)                |
 
 ## Outputs
 
@@ -104,6 +115,19 @@ jobs:
 
 Tags must follow semver format with a leading `v` (e.g., `v1.0.0`, `v2.1.0-beta1`).
 
+## Re-running for New Server Versions
+
+The Hytale Server version can change independently of your plugin. When that happens, you can re-run the workflow on a previously released tag to produce an additional build:
+
+1. Navigate to **Actions** → **CI** → select a previous run on the release tag → **Re-run all jobs** (or trigger a new workflow run on the same tag)
+2. The build job compiles against the latest Hytale Server version, producing a new JAR (e.g., `my-plugin-1.0.0+2026.02.19-1a311a592.jar` alongside the existing `my-plugin-1.0.0+2026.02.18-f3b8fff95.jar`)
+3. The release job detects the existing GitHub Release and:
+   - Adds the new JAR as an additional asset (does **not** remove previous JARs)
+   - Rebuilds the `.zip` archive to contain **all** JARs from the release
+   - Updates the `## Server Versions` section in the release body to list every server version
+   - Preserves the original changelog
+4. External publish jobs (GCS, Maven, Modtale, CurseForge) run for the newly built JAR
+
 ## What It Does
 
 1. **Build Job**
@@ -115,17 +139,24 @@ Tags must follow semver format with a leading `v` (e.g., `v1.0.0`, `v2.1.0-beta1
    - Builds the project with `mvn package`, passing `-Dhytale.server.version=<version>`
    - Uploads JAR artifacts
 
-2. **Publish Job** (releases only)
-   - Creates a GitHub Release with release notes
-   - Uploads JAR and ZIP archives to the release
-   - Optionally uploads artifacts to GCS
+2. **Release Job** (releases only)
+   - **New release:** Generates a changelog and creates a GitHub Release with the JAR, a ZIP archive, and a "Server Versions" section listing the Hytale Server version
+   - **Existing release (re-run):** Downloads all existing JARs from the release, adds the newly built JAR, rebuilds the ZIP to contain all JARs, and updates the "Server Versions" section. The original changelog is preserved.
+   - This allows the workflow to be re-run on the same tag when a new Hytale Server version is released, producing an additional JAR without creating a new GitHub release.
 
-3. **Maven Publish Job** (releases only)
+3. **GCS Publish Job** (releases only)
+   - Uploads artifacts to Google Cloud Storage
+
+4. **Maven Publish Job** (releases only)
    - Deploys artifacts to a Maven repository
 
-4. **Modtale Publish Job** (releases only)
+5. **Modtale Publish Job** (releases only)
    - Fetches GitHub-generated release notes
    - Publishes to [Modtale](https://modtale.net) with appropriate channel (RELEASE or BETA based on prerelease status)
+
+6. **CurseForge Publish Job** (releases only)
+   - Fetches GitHub-generated release notes
+   - Publishes to CurseForge with appropriate release type (release or beta based on prerelease status)
 
 ## Manual Approval for External Publishing
 
@@ -145,9 +176,9 @@ Each repository using these workflows must configure the environment:
 
 ### Workflow Behavior
 
-After a release tag is pushed:
-1. The **build** and **generate-changelog** jobs run automatically
-2. The **publish** job creates the GitHub Release with auto-generated notes
+After a release tag is pushed (or re-run on an existing tag):
+1. The **build** job runs automatically
+2. The **release** job creates or updates the GitHub Release with auto-generated notes and a "Server Versions" list
 3. The workflow **pauses** and waits for approval on the `publish-external` environment
 4. You can edit the GitHub Release notes during this time
 5. Once approved, all external publish jobs (GCS, Maven, Modtale, CurseForge) proceed in parallel
@@ -215,11 +246,11 @@ jobs:
 
 ### Inputs
 
-| Input          | Type   | Required | Default | Description                    |
-|----------------|--------|----------|---------|--------------------------------|
-| `version`      | string | Yes      | -       | The version to publish         |
-| `tag-name`     | string | Yes      | -       | The GitHub release tag name    |
-| `java-version` | string | No       | `"25"`  | Java version for Maven publish |
+| Input          | Type   | Required | Default | Description                                    |
+|----------------|--------|----------|---------|------------------------------------------------|
+| `version`      | string | Yes      | -       | The Maven version to publish, e.g. `1.1.1-rc1` |
+| `tag-name`     | string | Yes      | -       | The GitHub release tag name                    |
+| `java-version` | string | No       | `"25"`  | Java version for Maven publish                 |
 
 ### Secrets
 
@@ -245,8 +276,7 @@ jobs:
   publish-gcs:
     uses: nitrado/hytale-plugin-workflows/.github/workflows/gcs-publish.yml@main
     with:
-      artifact-id: "my-plugin"
-      version: "1.0.0"
+      version: "my-plugin-1.0.0+2026.02.19-1a311a592"
       tag-name: "v1.0.0"
     secrets:
       GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
@@ -255,11 +285,10 @@ jobs:
 
 ### Inputs
 
-| Input         | Type   | Required | Description                    |
-|---------------|--------|----------|--------------------------------|
-| `artifact-id` | string | Yes      | The artifact ID (jar prefix)   |
-| `version`     | string | Yes      | The version to publish         |
-| `tag-name`    | string | Yes      | The GitHub release tag name    |
+| Input      | Type   | Required | Description                                                                               |
+|------------|--------|----------|-------------------------------------------------------------------------------------------|
+| `version`  | string | Yes      | Full JAR file name without extension, e.g. `nitrado-query-1.1.1-rc1+2026.02.19-1a311a592` |
+| `tag-name` | string | Yes      | The GitHub release tag name                                                               |
 
 ### Secrets
 
@@ -281,10 +310,8 @@ jobs:
   publish-modtale:
     uses: nitrado/hytale-plugin-workflows/.github/workflows/modtale-publish.yml@main
     with:
-      artifact-id: "my-plugin"
-      version: "1.0.0"
+      version: "my-plugin-1.0.0+2026.02.19-1a311a592"
       tag-name: "v1.0.0"
-      channel: "RELEASE"  # optional: RELEASE, BETA, or ALPHA
       game-versions: "1.0-SNAPSHOT"  # optional
     secrets:
       MODTALE_API_KEY: ${{ secrets.MODTALE_API_KEY }}
@@ -293,14 +320,13 @@ jobs:
 
 ### Inputs
 
-| Input           | Type   | Required | Default                          | Description                       |
-|-----------------|--------|----------|----------------------------------|-----------------------------------|
-| `artifact-id`   | string | Yes      | -                                | The artifact ID (jar prefix)      |
-| `version`       | string | Yes      | -                                | The version to publish            |
-| `tag-name`      | string | Yes      | -                                | The GitHub release tag name       |
-| `channel`       | string | No       | `"RELEASE"`                      | Channel: RELEASE, BETA, or ALPHA  |
-| `game-versions` | string | No       | `"1.0-SNAPSHOT"`                 | Hytale versions (comma-separated) |
-| `changelog`     | string | No       | `"Automated Build & Release..."` | Changelog for this version        |
+| Input           | Type   | Required | Default          | Description                                                                               |
+|-----------------|--------|----------|------------------|-------------------------------------------------------------------------------------------|
+| `version`       | string | Yes      | -                | Full JAR file name without extension, e.g. `nitrado-query-1.1.1-rc1+2026.02.19-1a311a592` |
+| `tag-name`      | string | Yes      | -                | The GitHub release tag name                                                               |
+| `game-versions` | string | No       | `"1.0-SNAPSHOT"` | Hytale versions (comma-separated)                                                         |
+
+The release channel (RELEASE or BETA) is automatically determined from the GitHub release's prerelease status.
 
 ### Secrets
 
@@ -322,11 +348,9 @@ jobs:
   publish-curseforge:
     uses: nitrado/hytale-plugin-workflows/.github/workflows/curseforge-publish.yml@main
     with:
-      artifact-id: "my-plugin"
-      version: "1.0.0"
+      version: "my-plugin-1.0.0+2026.02.19-1a311a592"
       tag-name: "v1.0.0"
-      release-type: "release"  # optional: release, beta, or alpha
-      game-endpoint: "hytale"  # optional
+      game-endpoint: "42"  # optional
     secrets:
       CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
       CURSEFORGE_PROJECT_ID: ${{ secrets.CURSEFORGE_PROJECT_ID }}
@@ -334,17 +358,15 @@ jobs:
 
 ### Inputs
 
-| Input            | Type   | Required | Default                          | Description                              |
-|------------------|--------|----------|----------------------------------|------------------------------------------|
-| `artifact-id`    | string | Yes      | -                                | The artifact ID (jar prefix)             |
-| `version`        | string | Yes      | -                                | The version to publish                   |
-| `tag-name`       | string | Yes      | -                                | The GitHub release tag name              |
-| `release-type`   | string | No       | `"release"`                      | Type: release, beta, or alpha            |
-| `game-endpoint`  | string | No       | `"authors"`                      | CurseForge subdomain (e.g., hytale)      |
-| `game-versions`  | string | No       | `""`                             | Game version IDs (comma-separated)       |
-| `changelog`      | string | No       | `"Automated Build & Release..."` | Changelog for this version               |
-| `changelog-type` | string | No       | `"markdown"`                     | Changelog type: text, html, or markdown  |
-| `relations`      | string | No       | `""`                             | Project relations (slug:type, comma-sep) |
+| Input           | Type   | Required | Default | Description                                                                               |
+|-----------------|--------|----------|---------|-------------------------------------------------------------------------------------------|
+| `version`       | string | Yes      | -       | Full JAR file name without extension, e.g. `nitrado-query-1.1.1-rc1+2026.02.19-1a311a592` |
+| `tag-name`      | string | Yes      | -       | The GitHub release tag name                                                               |
+| `game-endpoint` | string | No       | `"42"`  | CurseForge subdomain (e.g., minecraft, kerbal, hytale)                                    |
+| `game-versions` | string | No       | `""`    | Game version IDs (comma-separated)                                                        |
+| `relations`     | string | No       | `""`    | Project relations (slug:type, comma-sep)                                                  |
+
+The release type (release or beta) is automatically determined from the GitHub release's prerelease status.
 
 ### Secrets
 
