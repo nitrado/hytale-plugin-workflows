@@ -43,7 +43,7 @@ on:
 
 jobs:
   build:
-    uses: nitrado/hytale-plugin-workflows/.github/workflows/plugin-ci.yml@main
+    uses: nitrado/hytale-plugin-workflows/.github/workflows/plugin-ci.yml@v2
     secrets:
       MAVEN_REPO_URL: ${{ secrets.MAVEN_REPO_URL }}
       MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
@@ -74,7 +74,7 @@ jobs:
 ```yaml
 jobs:
   build:
-    uses: nitrado/hytale-plugin-workflows/.github/workflows/plugin-ci.yml@main
+    uses: nitrado/hytale-plugin-workflows/.github/workflows/plugin-ci.yml@v2
     with:
       java-version: "25"
       artifact-retention-days: 14
@@ -214,7 +214,7 @@ on:
 
 jobs:
   check:
-    uses: nitrado/hytale-plugin-workflows/.github/workflows/rebuild-on-new-server-version.yml@main
+    uses: nitrado/hytale-plugin-workflows/.github/workflows/rebuild-on-new-server-version.yml@v2
     with:
       artifact-id: my-plugin
     secrets:
@@ -260,7 +260,7 @@ Add these secrets to your repository:
 ```yaml
 jobs:
   build:
-    uses: nitrado/hytale-plugin-workflows/.github/workflows/plugin-ci.yml@main
+    uses: nitrado/hytale-plugin-workflows/.github/workflows/plugin-ci.yml@v2
     secrets:
       # ... other secrets ...
       MODTALE_API_KEY: ${{ secrets.MODTALE_API_KEY }}
@@ -287,7 +287,7 @@ Standalone workflow to publish artifacts to a Maven repository. Can be called fr
 ```yaml
 jobs:
   publish-maven:
-    uses: nitrado/hytale-plugin-workflows/.github/workflows/maven-publish.yml@main
+    uses: nitrado/hytale-plugin-workflows/.github/workflows/maven-publish.yml@v2
     with:
       version: "1.0.0"
       tag-name: "v1.0.0"
@@ -331,7 +331,7 @@ Standalone workflow to upload release artifacts to Google Cloud Storage. Can be 
 ```yaml
 jobs:
   publish-gcs:
-    uses: nitrado/hytale-plugin-workflows/.github/workflows/gcs-publish.yml@main
+    uses: nitrado/hytale-plugin-workflows/.github/workflows/gcs-publish.yml@v2
     with:
       version: "my-plugin-1.0.0+2026.02.19-1a311a592"
       tag-name: "v1.0.0"
@@ -365,7 +365,7 @@ Standalone workflow to publish releases to [Modtale](https://modtale.net). Can b
 ```yaml
 jobs:
   publish-modtale:
-    uses: nitrado/hytale-plugin-workflows/.github/workflows/modtale-publish.yml@main
+    uses: nitrado/hytale-plugin-workflows/.github/workflows/modtale-publish.yml@v2
     with:
       version: "my-plugin-1.0.0+2026.02.19-1a311a592"
       tag-name: "v1.0.0"
@@ -403,7 +403,7 @@ Standalone workflow to publish releases to CurseForge. Can be called from other 
 ```yaml
 jobs:
   publish-curseforge:
-    uses: nitrado/hytale-plugin-workflows/.github/workflows/curseforge-publish.yml@main
+    uses: nitrado/hytale-plugin-workflows/.github/workflows/curseforge-publish.yml@v2
     with:
       version: "my-plugin-1.0.0+2026.02.19-1a311a592"
       tag-name: "v1.0.0"
