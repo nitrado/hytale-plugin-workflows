@@ -309,6 +309,7 @@ jobs:
 | `tag-name`              | string | Yes      | -       | The GitHub release tag name                                |
 | `hytale-server-version` | string | Yes      | -       | The Hytale Server version to use for dependency resolution |
 | `java-version`          | string | No       | `"25"`  | Java version for Maven publish                             |
+| `manifest-path`         | string | No       | `"src/main/resources/manifest.json"` | Path to `manifest.json`, stamped with the version before deploy |
 
 ### Secrets
 
