@@ -19,6 +19,10 @@ on:
         description: "The Hytale Server version to use for dependency resolution"
         type: string
         required: true
+      manifest-path:
+        description: "Path to manifest.json file"
+        type: string
+        default: "src/main/resources/manifest.json"
     secrets:
       MAVEN_REPO_URL:
         description: "Maven repository URL for dependencies"
@@ -57,6 +61,10 @@ on:
         description: "The Hytale Server version to use for dependency resolution"
         type: string
         required: true
+      manifest-path:
+        description: "Path to manifest.json file"
+        type: string
+        default: "src/main/resources/manifest.json"
 
 jobs:
   publish-maven:
@@ -100,6 +108,22 @@ jobs:
           distribution: temurin
           java-version: ${{ inputs.java-version }}
           cache: maven
+
+      # The jar deployed to Maven is built from a plain `mvn deploy` on the checked-out tag, so
+      # without this it ships the repository's placeholder manifest -- e.g. "Version": "1.0.0" on
+      # an artifact published as 1.1.1. Consumers declaring a constraint such as
+      # `Nitrado:WebServer=>=1.1.0` then fail to load with "version of dependency (1.0.0) does not
+      # satisfy '>=1.1.0'". Keep this in sync with the equivalent step in plugin-ci.yml.
+      - name: Update manifest version for publish
+        if: ${{ env.HAVE_MAVEN_PUBLISH == 'true' }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          SERVER_VERSION="${{ inputs.hytale-server-version }}"
+          sed -i "s/\"Version\": \"[^\"]*\"/\"Version\": \"$VERSION\"/" ${{ inputs.manifest-path }}
+          # ServerVersion must be a semver range, not a bare version -- see plugin-ci.yml.
+          sed -i "s/\"ServerVersion\": \"[^\"]*\"/\"ServerVersion\": \"=$SERVER_VERSION\"/" ${{ inputs.manifest-path }}
+          echo "Updated manifest.json to version $VERSION (ServerVersion: =$SERVER_VERSION)"
+          cat ${{ inputs.manifest-path }}
 
       - name: Set up Maven settings.xml for publishing
         if: ${{ env.HAVE_MAVEN_PUBLISH == 'true' }}

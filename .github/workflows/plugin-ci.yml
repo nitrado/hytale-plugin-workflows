@@ -224,8 +224,14 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           SERVER_VERSION="${{ steps.hytale-version.outputs.hytale_server_version }}"
           sed -i "s/\"Version\": \"[^\"]*\"/\"Version\": \"$VERSION\"/" ${{ inputs.manifest-path }}
-          sed -i "s/\"ServerVersion\": \"[^\"]*\"/\"ServerVersion\": \"$SERVER_VERSION\"/" ${{ inputs.manifest-path }}
-          echo "Updated manifest.json to version $VERSION"
+          # ServerVersion must be a semver RANGE, not a bare version. The server rejects a bare
+          # version whose patch is non-zero ("Bare version '0.5.9' is not a valid range"), so the
+          # plugin fails to load entirely; and a bare version whose patch IS zero silently widens
+          # to >=0.6.0 <0.7.0, claiming compatibility with builds that were never tested.
+          # "=" pins to exactly the server version this jar was built against, which matches the
+          # release layout of one jar per server version (artifact-version+serverversion.jar).
+          sed -i "s/\"ServerVersion\": \"[^\"]*\"/\"ServerVersion\": \"=$SERVER_VERSION\"/" ${{ inputs.manifest-path }}
+          echo "Updated manifest.json to version $VERSION (ServerVersion: =$SERVER_VERSION)"
           cat ${{ inputs.manifest-path }}
 
       - name: Build (clean package)
