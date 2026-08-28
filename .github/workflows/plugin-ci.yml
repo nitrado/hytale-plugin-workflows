@@ -22,6 +22,10 @@ on:
         description: "Path to manifest.json file"
         type: string
         default: "src/main/resources/manifest.json"
+      server-version-range-symbol:
+        description: "Symbol prefix for the ServerVersion range in manifest.json (e.g. ~, ^, =)"
+        type: string
+        default: "="
       checkout-ref:
         description: "Git ref to checkout (tag, branch, SHA). Defaults to the triggering ref."
         type: string
@@ -224,7 +228,8 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           SERVER_VERSION="${{ steps.hytale-version.outputs.hytale_server_version }}"
           sed -i "s/\"Version\": \"[^\"]*\"/\"Version\": \"$VERSION\"/" ${{ inputs.manifest-path }}
-          sed -i "s/\"ServerVersion\": \"[^\"]*\"/\"ServerVersion\": \"$SERVER_VERSION\"/" ${{ inputs.manifest-path }}
+          RANGE_SYMBOL="${{ inputs.server-version-range-symbol }}"
+          sed -i "s/\"ServerVersion\": \"[^\"]*\"/\"ServerVersion\": \"${RANGE_SYMBOL}$SERVER_VERSION\"/" ${{ inputs.manifest-path }}
           echo "Updated manifest.json to version $VERSION"
           cat ${{ inputs.manifest-path }}
 

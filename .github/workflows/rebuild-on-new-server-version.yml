@@ -162,6 +162,7 @@ jobs:
     uses: ./.github/workflows/plugin-ci.yml
     with:
       checkout-ref: ${{ needs.check.outputs.tag_name }}
+      server-version-range-symbol: "~"
     secrets:
       MAVEN_REPO_URL: ${{ secrets.MAVEN_REPO_URL }}
       MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
